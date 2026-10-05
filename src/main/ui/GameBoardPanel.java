@@ -1,10 +1,14 @@
 package main.ui;
 
+import main.ai.BotAI;
+import main.db.GameSessionDAO;
+import main.logic.SurvivalCalculator;
 import main.models.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class GameBoardPanel extends JPanel {
     private final GameFrame mainFrame;
@@ -36,7 +40,7 @@ public class GameBoardPanel extends JPanel {
         ));
 
         disasterLabel = new JLabel("🌋 КАТАСТРОФА: Завантаження...", SwingConstants.CENTER);
-        disasterLabel.setFont(new Font("Serif", Font.BOLD, 22));
+        disasterLabel.setFont(new Font("Serif", Font.BOLD, 20));
         disasterLabel.setForeground(new Color(255, 87, 51));
         topPanel.add(disasterLabel, BorderLayout.CENTER);
 
@@ -49,10 +53,10 @@ public class GameBoardPanel extends JPanel {
 
         // Права панель - Чат дискусії ботів та гравців
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
-        rightPanel.setPreferredSize(new Dimension(340, 0));
+        rightPanel.setPreferredSize(new Dimension(360, 0));
         rightPanel.setBackground(new Color(22, 22, 26));
         rightPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(Color.DARK_GRAY), "💬 ЧАТ ОБГОВОРЕННЯ",
+                BorderFactory.createLineBorder(Color.DARK_GRAY), "💬 ЧАТ ОБГОВОРЕННЯ БОТІВ",
                 0, 0, new Font("SansSerif", Font.BOLD, 14), Color.WHITE));
 
         chatArea = new JTextArea();
@@ -79,8 +83,8 @@ public class GameBoardPanel extends JPanel {
         JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         actionsPanel.setOpaque(false);
 
-        BunkerButton btnVote = new BunkerButton("🗳️ ГПУ (Голосування)");
-        btnVote.setPreferredSize(new Dimension(220, 45));
+        BunkerButton btnVote = new BunkerButton("🗳️ Голосування");
+        btnVote.setPreferredSize(new Dimension(200, 45));
         btnVote.addActionListener(e -> triggerVotingPhase());
 
         BunkerButton btnExit = new BunkerButton("🚪 Вийти");
@@ -99,7 +103,6 @@ public class GameBoardPanel extends JPanel {
         currentDisaster = CardGenerator.generateRandomDisaster();
         disasterLabel.setText("🌋 КАТАСТРОФА: " + currentDisaster.getName() + " — " + currentDisaster.getDescription());
 
-        // Генерація 6 гравців (1 людина, 5 ботів)
         players = new ArrayList<>();
         players.add(new Player(1, "Ви (Гравець)", false, 1, CardGenerator.generateRandomCard()));
         for (int i = 2; i <= 6; i++) {
@@ -108,7 +111,7 @@ public class GameBoardPanel extends JPanel {
 
         chatArea.setText("=== ПОЧАТОК НОВОЇ ПАРТІЇ У БУНКЕРІ ===\n");
         chatArea.append("🤖 Скан бункера завершено. Усього місць: 3 з 6.\n");
-        chatArea.append("📢 Увага! Відкрийте одну зі своїх рис для обговорення.\n\n");
+        chatArea.append("📢 Раунд 1: Відкрийте одну зі своїх рис для обговорення.\n\n");
 
         updateUIComponents();
     }
@@ -137,30 +140,32 @@ public class GameBoardPanel extends JPanel {
             if (card.isHealthRevealed()) sb.append("Здоров'я: ").append(card.getHealthCondition()).append("\n");
             if (card.isBaggageRevealed()) sb.append("Багаж: ").append(card.getBaggage()).append("\n");
 
-            if (sb.length() == 0) sb.append("Характеристики поки приховані...");
+            if (sb.length() == 0) sb.append("Характеристики приховані...");
             info.setText(sb.toString());
 
             pCard.add(info, BorderLayout.CENTER);
             playersPanel.add(pCard);
         }
 
-        // Оновлення моєї картки внизу
         myCardPanel.removeAll();
-        if (!players.isEmpty()) {
+        if (!players.isEmpty() && !players.get(0).isEliminated()) {
             CharacterCard myCard = players.get(0).getCard();
-            JLabel myInfo = new JLabel(String.format("<html><b>Ваш Персонаж:</b> %s (%d років)<br><b>Професія:</b> %s (%d років досвіду)<br><b>Здоров'я:</b> %s<br><b>Багаж:</b> %s</html>",
-                    myCard.getName(), myCard.getAge(), myCard.getProfession(), myCard.getExperienceYears(), myCard.getHealthCondition(), myCard.getBaggage()));
-            myInfo.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            JLabel myInfo = new JLabel(String.format("<html><b>Персонаж:</b> %s (%d р.) | <b>Професія:</b> %s<br><b>Здоров'я:</b> %s | <b>Багаж:</b> %s</html>",
+                    myCard.getName(), myCard.getAge(), myCard.getProfession(), myCard.getHealthCondition(), myCard.getBaggage()));
+            myInfo.setFont(new Font("SansSerif", Font.PLAIN, 13));
             myInfo.setForeground(Color.WHITE);
             myCardPanel.add(myInfo);
 
-            JButton btnRevealProf = new JButton("Відкрити Професію");
-            btnRevealProf.addActionListener(e -> {
-                myCard.setProfessionRevealed(true);
-                chatArea.append("👤 Ви відкрили свою професію: " + myCard.getProfession() + "\n");
-                updateUIComponents();
-            });
+            JButton btnRevealProf = new JButton("Професія");
+            btnRevealProf.addActionListener(e -> revealTrait(0, "PROFESSION"));
+            JButton btnRevealHealth = new JButton("Здоров'я");
+            btnRevealHealth.addActionListener(e -> revealTrait(0, "HEALTH"));
+            JButton btnRevealBaggage = new JButton("Багаж");
+            btnRevealBaggage.addActionListener(e -> revealTrait(0, "BAGGAGE"));
+
             myCardPanel.add(btnRevealProf);
+            myCardPanel.add(btnRevealHealth);
+            myCardPanel.add(btnRevealBaggage);
         }
 
         playersPanel.revalidate();
@@ -169,37 +174,71 @@ public class GameBoardPanel extends JPanel {
         myCardPanel.repaint();
     }
 
+    private void revealTrait(int playerIndex, String traitType) {
+        CharacterCard card = players.get(playerIndex).getCard();
+        if ("PROFESSION".equals(traitType)) card.setProfessionRevealed(true);
+        if ("HEALTH".equals(traitType)) card.setHealthRevealed(true);
+        if ("BAGGAGE".equals(traitType)) card.setBaggageRevealed(true);
+
+        chatArea.append("👤 Ви відкрили рису для обговорення!\n");
+
+        // Боти також відкривають по 1 рисі і залишають коментар
+        for (Player p : players) {
+            if (p.isBot() && !p.isEliminated()) {
+                p.getCard().setProfessionRevealed(true);
+                Player botTarget = BotAI.selectVoteTarget(p, players, currentDisaster);
+                if (botTarget != null) {
+                    chatArea.append(BotAI.generateChatComment(p, botTarget, currentDisaster) + "\n");
+                }
+            }
+        }
+        updateUIComponents();
+    }
+
     private void triggerVotingPhase() {
-        // Просте голосування
-        String[] options = players.stream()
-                .filter(p -> !p.isEliminated() && p.getId() != 1)
+        List<Player> active = players.stream().filter(p -> !p.isEliminated()).collect(Collectors.toList());
+        if (active.size() <= 3) {
+            finishGameAndShowEpilogue(active);
+            return;
+        }
+
+        String[] options = active.stream()
+                .filter(p -> p.getId() != 1)
                 .map(Player::getName)
                 .toArray(String[]::new);
 
-        if (options.length == 0) return;
-
         String selected = (String) JOptionPane.showInputDialog(this,
-                "Оберіть гравця, якого вважаєте найменш корисним для бункера:",
-                "🗳️ Голосування та вигнання", JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+                "Оберіть гравця для вигнання з бункера:",
+                "🗳️ Таємне голосування (Раунд " + currentRound + ")", JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
 
         if (selected != null) {
             for (Player p : players) {
                 if (p.getName().equals(selected)) {
                     p.setEliminated(true);
-                    chatArea.append("🚨 БІЛЬШІСТЮ ГОЛОСІВ ВИГНАНО: " + p.getName() + "!\n");
+                    chatArea.append("\n🚨 РЕЗУЛЬТАТ: Більшістю голосів вигнано " + p.getName() + "!\n\n");
                     break;
                 }
             }
+            currentRound++;
             updateUIComponents();
+
+            List<Player> remaining = players.stream().filter(p -> !p.isEliminated()).collect(Collectors.toList());
+            if (remaining.size() <= 3) {
+                finishGameAndShowEpilogue(remaining);
+            }
         }
     }
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        // Малювання фону 2D підземного сховища
-        Graphics2D g2 = (Graphics2D) g;
-        g2.setColor(new Color(255, 255, 255, 5));
-        g2.fillRect(0, 0, getWidth(), getHeight());
+    private void finishGameAndShowEpilogue(List<Player> survivors) {
+        SurvivalCalculator.SurvivalResult result = SurvivalCalculator.calculateBunkerSurvival(survivors, currentDisaster);
+
+        // Збереження результату у MySQL (kursova_db)
+        GameSessionDAO.saveSession(1, currentDisaster.getName(), "SINGLEPLAYER", 6, survivors.size(), result.getScorePercent());
+
+        JOptionPane.showMessageDialog(this, result.getEpilogue(),
+                "🏆 ФІНАЛ ГРИ ТА РЕЗУЛЬТАТИ ВІДНОВЛЕННЯ",
+                result.isVictory() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+
+        mainFrame.showPanel("PROFILE");
     }
 }
