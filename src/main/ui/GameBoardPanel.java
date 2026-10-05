@@ -31,7 +31,7 @@ public class GameBoardPanel extends JPanel {
     }
 
     private void initComponents() {
-        // Верхня панель - Інформація про катастрофу
+        // Верхня панель
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setBackground(new Color(30, 30, 36));
         topPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -51,7 +51,7 @@ public class GameBoardPanel extends JPanel {
         playersPanel.setOpaque(false);
         add(playersPanel, BorderLayout.CENTER);
 
-        // Права панель - Чат дискусії ботів та гравців
+        // Права панель - Чат дискусії ботів
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
         rightPanel.setPreferredSize(new Dimension(360, 0));
         rightPanel.setBackground(new Color(22, 22, 26));
@@ -72,7 +72,7 @@ public class GameBoardPanel extends JPanel {
 
         add(rightPanel, BorderLayout.EAST);
 
-        // Нижня панель - Картка поточного гравця та кнопки дій
+        // Нижня панель - Картка та Кнопки Повернення в 2D Бункер
         JPanel bottomPanel = new JPanel(new BorderLayout(10, 10));
         bottomPanel.setOpaque(false);
 
@@ -80,17 +80,22 @@ public class GameBoardPanel extends JPanel {
         myCardPanel.setBackground(new Color(25, 25, 30));
         bottomPanel.add(myCardPanel, BorderLayout.CENTER);
 
-        JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         actionsPanel.setOpaque(false);
 
+        BunkerButton btnReturnToRpg = new BunkerButton("🏃 Повернутися у 2D Бункер");
+        btnReturnToRpg.setPreferredSize(new Dimension(240, 45));
+        btnReturnToRpg.addActionListener(e -> mainFrame.showPanel("RPG"));
+
         BunkerButton btnVote = new BunkerButton("🗳️ Голосування");
-        btnVote.setPreferredSize(new Dimension(200, 45));
+        btnVote.setPreferredSize(new Dimension(180, 45));
         btnVote.addActionListener(e -> triggerVotingPhase());
 
-        BunkerButton btnExit = new BunkerButton("🚪 Вийти");
-        btnExit.setPreferredSize(new Dimension(140, 45));
+        BunkerButton btnExit = new BunkerButton("🚪 Меню");
+        btnExit.setPreferredSize(new Dimension(110, 45));
         btnExit.addActionListener(e -> mainFrame.showPanel("MENU"));
 
+        actionsPanel.add(btnReturnToRpg);
         actionsPanel.add(btnVote);
         actionsPanel.add(btnExit);
 
@@ -182,7 +187,6 @@ public class GameBoardPanel extends JPanel {
 
         chatArea.append("👤 Ви відкрили рису для обговорення!\n");
 
-        // Боти також відкривають по 1 рисі і залишають коментар
         for (Player p : players) {
             if (p.isBot() && !p.isEliminated()) {
                 p.getCard().setProfessionRevealed(true);
@@ -225,6 +229,14 @@ public class GameBoardPanel extends JPanel {
             List<Player> remaining = players.stream().filter(p -> !p.isEliminated()).collect(Collectors.toList());
             if (remaining.size() <= 3) {
                 finishGameAndShowEpilogue(remaining);
+            } else {
+                // Після голосування пропонуємо повернутися у 2D Бункер
+                int choice = JOptionPane.showConfirmDialog(this,
+                        "Голосування завершено! Бажаєте повернутися у 2D Бункер для продовження гри?",
+                        "🏃 Повернення в 2D Бункер", JOptionPane.YES_NO_OPTION);
+                if (choice == JOptionPane.YES_OPTION) {
+                    mainFrame.showPanel("RPG");
+                }
             }
         }
     }
@@ -232,7 +244,6 @@ public class GameBoardPanel extends JPanel {
     private void finishGameAndShowEpilogue(List<Player> survivors) {
         SurvivalCalculator.SurvivalResult result = SurvivalCalculator.calculateBunkerSurvival(survivors, currentDisaster);
 
-        // Збереження результату у MySQL (kursova_db)
         GameSessionDAO.saveSession(1, currentDisaster.getName(), "SINGLEPLAYER", 6, survivors.size(), result.getScorePercent());
 
         JOptionPane.showMessageDialog(this, result.getEpilogue(),

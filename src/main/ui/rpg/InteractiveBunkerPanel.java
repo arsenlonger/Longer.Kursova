@@ -21,12 +21,17 @@ public class InteractiveBunkerPanel extends JPanel {
     private CharacterCard playerCard;
     private final List<Avatar2D> botAvatars = new ArrayList<>();
 
-    // Навички гравця (Рівні навичок)
-    private int botanyLevel = 0; // 0: Базовий, 1: Прискорений ріст
+    // Навички
+    private int botanyLevel = 0;
 
     // Інвентар для сільського господарства
     private boolean hasWaterBucket = false;
     private boolean hasSeeds = true;
+
+    // Стан підмітання / протирання пилу (Таймери фізичної роботи)
+    private boolean isPerformingWork = false;
+    private int workSecondsRemaining = 0;
+    private Timer workTimer;
 
     // Клавіші керування
     private boolean wPressed = false;
@@ -53,7 +58,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
     private Timer gameLoop60Fps;
     private long lastBotWaypointTime = 0;
-    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E для прочкачки навичок та дій!";
+    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E біля шафи або мітли для фізичної роботи!";
 
     public InteractiveBunkerPanel(GameFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -120,7 +125,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
         gameLoop60Fps = new Timer(16, e -> {
             if (!isNight) {
-                float moveSpeed = 3.5f;
+                float moveSpeed = isPerformingWork ? 0f : 3.5f; // Під час фізичної роботи рухатися не можна
                 float dx = 0, dy = 0;
                 if (wPressed) dy -= moveSpeed;
                 if (sPressed) dy += moveSpeed;
@@ -255,6 +260,7 @@ public class InteractiveBunkerPanel extends JPanel {
     }
 
     private void interactWithCurrentRoom() {
+        if (isPerformingWork) return;
         Point p = new Point(playerAvatar.getX(), playerAvatar.getY());
 
         if (BunkerMap.OXYGEN_ROOM.bounds.contains(p)) {
@@ -266,9 +272,9 @@ public class InteractiveBunkerPanel extends JPanel {
                 statusNotification = "💨 Кисневий блок працює нормально.";
             }
         } else if (BunkerMap.LIBRARY_MED_BAY.bounds.contains(p)) {
-            openLibraryAndSkillTreeDialog();
+            openLibraryCustomDialog();
         } else if (BunkerMap.COUNCIL_ROOM.bounds.contains(p)) {
-            openCouncilRoomDialog();
+            openCouncilRoomCustomDialog();
         } else if (BunkerMap.HYDROPONICS_ROOM.bounds.contains(p)) {
             handleHydroponicsFarming();
         } else if (BunkerMap.WATER_STATION.bounds.contains(p)) {
@@ -276,6 +282,26 @@ public class InteractiveBunkerPanel extends JPanel {
         } else if (BunkerMap.SLEEPING_QUARTERS.bounds.contains(p)) {
             startNightPhase();
         }
+    }
+
+    private void startPhysicalChore(String choreName, int rewardCoins) {
+        isPerformingWork = true;
+        workSecondsRemaining = 2;
+        statusNotification = "🧼 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
+
+        if (workTimer != null) workTimer.stop();
+        workTimer = new Timer(1000, e -> {
+            workSecondsRemaining--;
+            if (workSecondsRemaining <= 0) {
+                isPerformingWork = false;
+                playerAvatar.addCoins(rewardCoins);
+                statusNotification = "✅ Роботу виконай! Отримано +" + rewardCoins + " монет! (Баланс: " + playerAvatar.getCoins() + ")";
+                ((Timer) e.getSource()).stop();
+            } else {
+                statusNotification = "🧼 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
+            }
+        });
+        workTimer.start();
     }
 
     private void handleWaterStation() {
@@ -305,8 +331,6 @@ public class InteractiveBunkerPanel extends JPanel {
             if (hasWaterBucket) {
                 hasWaterBucket = false;
                 currentFarmStage = FarmStage.GROWING;
-                
-                // Якщо вивчено Агрономію в бібліотеці — ріст 5 сек замість 10 сек
                 farmGrowSecondsRemaining = (botanyLevel >= 1) ? 5 : 10;
                 statusNotification = "🚿 Теплицю полито відром води! Рослини ростуть (" + farmGrowSecondsRemaining + " сек)...";
 
@@ -334,64 +358,126 @@ public class InteractiveBunkerPanel extends JPanel {
         }
     }
 
-    private void openCouncilRoomDialog() {
-        String[] options = {"🧹 Підмести підлогу (+5 монет)", "🗳️ Сісти за стіл (Фаза Голосування)", "Скасувати"};
-        int choice = JOptionPane.showOptionDialog(this,
-                "🗳️ ЗАЛ ЗАСІДАНЬ\nМонети: " + playerAvatar.getCoins() + "\nОберіть дію:",
-                "Зал Засідань", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+    private void openCouncilRoomCustomDialog() {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "🗳️ ЗАЛ ЗАСІДАНЬ", true);
+        dialog.setLayout(new BorderLayout(15, 15));
+        dialog.getContentPane().setBackground(new Color(22, 24, 30));
 
-        if (choice == 0) {
-            playerAvatar.addCoins(5);
-            statusNotification = "🧹 Ви підмели підлогу у Залі Засідань та отримали +5 монет!";
-        } else if (choice == 1) {
+        JPanel contentPanel = new JPanel(new GridLayout(3, 1, 10, 10));
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        contentPanel.setOpaque(false);
+
+        JLabel infoLabel = new JLabel("<html><center><b>🗳️ ЗАЛ ЗАСІДАНЬ</b><br>Баланс: " + playerAvatar.getCoins() + " монет.<br>Оберіть дію:</center></html>", SwingConstants.CENTER);
+        infoLabel.setForeground(Color.WHITE);
+        infoLabel.setFont(new Font("SansSerif", Font.PLAIN, 15));
+
+        BunkerButton btnSweep = new BunkerButton("🧹 Фізично підмести підлогу (+5 монет)");
+        btnSweep.setPreferredSize(new Dimension(340, 42));
+        btnSweep.addActionListener(e -> {
+            dialog.dispose();
+            startPhysicalChore("Підмітаємо підлогу у Залі Засідань", 5);
+        });
+
+        BunkerButton btnVote = new BunkerButton("🗳️ Сісти за стіл (Фаза Голосування)");
+        btnVote.setPreferredSize(new Dimension(340, 42));
+        btnVote.addActionListener(e -> {
+            dialog.dispose();
             statusNotification = "🗳️ Ви сіли за Стіл Переговорів. Перехід до голосування...";
             mainFrame.showPanel("GAME");
-        }
+        });
+
+        contentPanel.add(infoLabel);
+        contentPanel.add(btnSweep);
+        contentPanel.add(btnVote);
+
+        dialog.add(contentPanel, BorderLayout.CENTER);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
-    private void openLibraryAndSkillTreeDialog() {
-        String[] options = {
-                "🩸 Прокачати Медицину Lvl " + (playerAvatar.getDoctorLevel() + 1) + " (50 монет)",
-                "🔧 Прокачати Механіку Lvl " + (playerAvatar.getMechanicLevel() + 1) + " (50 монет)",
-                "🌱 Прокачати Агрономію Lvl 1 (Прискорення росту) (50 монет)",
-                "🧼 Протерти пил з книг (+5 монет)",
-                "Скасувати"
-        };
+    private void openLibraryCustomDialog() {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "📚 ЦЕНТР ПРОКАЧКИ НАВИЧОК", true);
+        dialog.setLayout(new BorderLayout(15, 15));
+        dialog.getContentPane().setBackground(new Color(20, 22, 28));
 
-        int choice = JOptionPane.showOptionDialog(this,
-                "📚 БІБЛІОТЕКА ТА ЦЕНТР ПРОКАЧКИ НАВИЧОК\n" +
-                "Баланс: " + playerAvatar.getCoins() + " монет.\n\n" +
-                "ПОТОЧНІ РІВНІ НАВИЧОК:\n" +
-                "• 🩸 Медицина: " + playerAvatar.getDoctorLevel() + " Рівень\n" +
-                "• 🔧 Механіка: " + playerAvatar.getMechanicLevel() + " Рівень\n" +
-                "• 🌱 Агрономія: " + botanyLevel + " Рівень\n",
-                "📚 Прокачка навичок у Бібліотеці", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+        centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        centerPanel.setOpaque(false);
 
-        if (choice == 0) {
+        JLabel headerLabel = new JLabel("<html><center><h2>📚 БІБЛІОТЕКА ТА ПРОКАЧКА НАВИЧОК</h2>" +
+                "Баланс: <b>" + playerAvatar.getCoins() + " монет</b><br><br>" +
+                "• 🩸 Медицина: <b>" + playerAvatar.getDoctorLevel() + " Рівень</b><br>" +
+                "• 🔧 Механіка: <b>" + playerAvatar.getMechanicLevel() + " Рівень</b><br>" +
+                "• 🌱 Агрономія: <b>" + botanyLevel + " Рівень</b></center></html>", SwingConstants.CENTER);
+        headerLabel.setForeground(Color.WHITE);
+        headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        centerPanel.add(headerLabel);
+        centerPanel.add(Box.createVerticalStrut(15));
+
+        // Кнопка фізичного витирання пилу
+        BunkerButton btnDust = new BunkerButton("🧼 Фізично протерти пил з книг (+5 монет)");
+        btnDust.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnDust.setPreferredSize(new Dimension(360, 40));
+        btnDust.addActionListener(e -> {
+            dialog.dispose();
+            startPhysicalChore("Протираємо пил з книг у бібліотеці", 5);
+        });
+        centerPanel.add(btnDust);
+        centerPanel.add(Box.createVerticalStrut(10));
+
+        // Кнопка Медицини
+        BunkerButton btnMed = new BunkerButton("🩸 Прокачати Медицину Lvl " + (playerAvatar.getDoctorLevel() + 1) + " (50 монет)");
+        btnMed.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnMed.setPreferredSize(new Dimension(360, 40));
+        btnMed.addActionListener(e -> {
             if (playerAvatar.spendCoins(50)) {
                 playerAvatar.setDoctorLevel(playerAvatar.getDoctorLevel() + 1);
-                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Медицину до " + playerAvatar.getDoctorLevel() + " рівня!";
+                statusNotification = "🎉 Ви прокачали Медицину до " + playerAvatar.getDoctorLevel() + " рівня!";
+                dialog.dispose();
             } else {
-                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+                JOptionPane.showMessageDialog(dialog, "❌ Недостатньо монет! Потрібно 50 монет.", "Помилка", JOptionPane.WARNING_MESSAGE);
             }
-        } else if (choice == 1) {
+        });
+        centerPanel.add(btnMed);
+        centerPanel.add(Box.createVerticalStrut(10));
+
+        // Кнопка Механіки
+        BunkerButton btnMech = new BunkerButton("🔧 Прокачати Механіку Lvl " + (playerAvatar.getMechanicLevel() + 1) + " (50 монет)");
+        btnMech.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnMech.setPreferredSize(new Dimension(360, 40));
+        btnMech.addActionListener(e -> {
             if (playerAvatar.spendCoins(50)) {
                 playerAvatar.setMechanicLevel(playerAvatar.getMechanicLevel() + 1);
-                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Механіку до " + playerAvatar.getMechanicLevel() + " рівня!";
+                statusNotification = "🎉 Ви прокачали Механіку до " + playerAvatar.getMechanicLevel() + " рівня!";
+                dialog.dispose();
             } else {
-                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+                JOptionPane.showMessageDialog(dialog, "❌ Недостатньо монет! Потрібно 50 монет.", "Помилка", JOptionPane.WARNING_MESSAGE);
             }
-        } else if (choice == 2) {
+        });
+        centerPanel.add(btnMech);
+        centerPanel.add(Box.createVerticalStrut(10));
+
+        // Кнопка Агрономії
+        BunkerButton btnBotany = new BunkerButton("🌱 Агрономія Lvl 1 (Прискорення росту) (50 монет)");
+        btnBotany.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnBotany.setPreferredSize(new Dimension(360, 40));
+        btnBotany.addActionListener(e -> {
             if (playerAvatar.spendCoins(50)) {
                 botanyLevel = 1;
-                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Агрономію! Рослини в теплиці тепер ростуть у 2 рази швидше (5 сек)!";
+                statusNotification = "🎉 Ви прокачали Агрономію! Рослини ростуть за 5 сек!";
+                dialog.dispose();
             } else {
-                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+                JOptionPane.showMessageDialog(dialog, "❌ Недостатньо монет! Потрібно 50 монет.", "Помилка", JOptionPane.WARNING_MESSAGE);
             }
-        } else if (choice == 3) {
-            playerAvatar.addCoins(5);
-            statusNotification = "🧼 Ви протерли пил з книг у бібліотеці та отримали +5 монет!";
-        }
+        });
+        centerPanel.add(btnBotany);
+
+        dialog.add(centerPanel, BorderLayout.CENTER);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
     @Override
@@ -403,6 +489,7 @@ public class InteractiveBunkerPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
 
+        // 1. Металевий фон
         g2.setColor(new Color(16, 17, 22));
         g2.fillRect(0, 0, width, height);
 
@@ -415,6 +502,7 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawLine(0, y, width, y);
         }
 
+        // 2. Панель Днів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(10, 40, 110, 400);
         g2.setColor(new Color(255, 87, 51));
