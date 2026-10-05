@@ -51,7 +51,7 @@ public class Avatar2D {
 
         if (isMoving) {
             animTick++;
-            if (animTick % 10 == 0) {
+            if (animTick % 8 == 0) {
                 animFrame = (animFrame == 0) ? 1 : 0;
             }
         } else {
@@ -87,7 +87,7 @@ public class Avatar2D {
     }
 
     /**
-     * Малювання 2D-персонажа: якщо завантажено спрайт з 2 фреймами, анімує кроки при ходьбі!
+     * Малювання 2D-персонажа: точний вибір горизонтальних фреймів 0 та 1 без обрізання тіла!
      */
     public void draw(Graphics2D g2) {
         int ix = (int) x;
@@ -102,22 +102,21 @@ public class Avatar2D {
 
             BufferedImage frameImg = fullSprite;
 
-            // Якщо спрайт містить 2 фрейми горизонтально (Width > Height) або горизонтальний спрайт-шит
-            if (imgW >= imgH && imgW >= 2) {
-                int frameW = imgW / 2;
-                int subX = animFrame * frameW;
+            // Горизонтальне розділення 2 фреймів side-by-side (130x420 кожна половина)
+            int frameW = imgW / 2;
+            int subX = animFrame * frameW;
+            if (subX + frameW <= imgW) {
                 frameImg = fullSprite.getSubimage(subX, 0, frameW, imgH);
-            } else if (imgH >= imgW * 1.5 && imgH >= 2) {
-                // Якщо 2 фрейми розташовані вертикально (Height > Width)
-                int frameH = imgH / 2;
-                int subY = animFrame * frameH;
-                frameImg = fullSprite.getSubimage(0, subY, imgW, frameH);
             }
 
-            // Малювання анімованого спрайта з Figma
-            g2.drawImage(frameImg, ix, iy, 42, 54, null);
+            // Малювання повного зображення персонажа висотою 68px з правильним співвідношенням
+            int renderWidth = 24;
+            int renderHeight = (int) (renderWidth * ((double) imgH / frameW));
+            renderHeight = Math.min(renderHeight, 72);
+
+            g2.drawImage(frameImg, ix, iy - (renderHeight - 32), renderWidth, renderHeight, null);
         } else {
-            // Процедурний виживальник
+            // Процедурне малювання
             g2.setColor(new Color(0, 0, 0, 80));
             g2.fillOval(ix - 2, iy + 22, 28, 10);
 
@@ -140,16 +139,16 @@ public class Avatar2D {
             g2.fillOval(ix + 14, iy + 8, 2, 3);
         }
 
-        // 5. Ім'я персонажа
+        // Ім'я персонажа
         g2.setFont(new Font("SansSerif", Font.BOLD, 11));
         FontMetrics fm = g2.getFontMetrics();
         int textWidth = fm.stringWidth(name);
 
         g2.setColor(new Color(0, 0, 0, 160));
-        g2.fillRect(ix + 12 - textWidth / 2 - 4, iy - 16, textWidth + 8, 14);
+        g2.fillRect(ix + 12 - textWidth / 2 - 4, iy - 24, textWidth + 8, 14);
 
         g2.setColor(isBot ? new Color(255, 200, 100) : new Color(0, 255, 150));
-        g2.drawString(name, ix + 12 - textWidth / 2, iy - 5);
+        g2.drawString(name, ix + 12 - textWidth / 2, iy - 13);
     }
 
     public String getName() { return name; }
