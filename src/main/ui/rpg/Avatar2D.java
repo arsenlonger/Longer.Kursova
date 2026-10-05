@@ -1,6 +1,8 @@
 package main.ui.rpg;
 
+import main.config.TextureLoader;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 
 public class Avatar2D {
     private final String name;
@@ -30,7 +32,6 @@ public class Avatar2D {
 
     public void updateSmoothMovement(Rectangle boundary) {
         if (isBot) {
-            // Плавне переміщення бота до цілі (Lerp)
             float speed = 1.2f;
             if (Math.abs(x - targetX) > speed) {
                 x += (targetX > x) ? speed : -speed;
@@ -64,39 +65,44 @@ public class Avatar2D {
     }
 
     /**
-     * Малювання 2D-персонажа людини-виживальника (людина в куртці з головою, волоссям та тінню)
+     * Малювання 2D-персонажа: якщо у паці assets/images є PNG спрайт, малює PNG, інакше процедурну людину.
      */
     public void draw(Graphics2D g2) {
         int ix = (int) x;
         int iy = (int) y;
 
-        // 1. Тінь на підлозі під ногами
-        g2.setColor(new Color(0, 0, 0, 80));
-        g2.fillOval(ix - 2, iy + 22, 28, 10);
+        // Перевірка наявності кастомного PNG спрайта з Figma
+        String spriteName = isBot ? "bot.png" : "player.png";
+        BufferedImage customSprite = TextureLoader.getTexture(spriteName);
 
-        // 2. Куртка / Тіло персонажа (Плечі)
-        g2.setColor(jacketColor);
-        g2.fillRoundRect(ix, iy + 10, 24, 18, 8, 8);
-        g2.setColor(Color.BLACK);
-        g2.setStroke(new BasicStroke(1.5f));
-        g2.drawRoundRect(ix, iy + 10, 24, 18, 8, 8);
+        if (customSprite != null) {
+            // Малювання завантаженого PNG спрайта з Figma
+            g2.drawImage(customSprite, ix, iy, 36, 48, null);
+        } else {
+            // Процедурне малювання виживальника
+            g2.setColor(new Color(0, 0, 0, 80));
+            g2.fillOval(ix - 2, iy + 22, 28, 10);
 
-        // 3. Голова людини (Колір шкіри)
-        g2.setColor(new Color(245, 198, 165));
-        g2.fillOval(ix + 3, iy, 18, 18);
-        g2.setColor(Color.BLACK);
-        g2.drawOval(ix + 3, iy, 18, 18);
+            g2.setColor(jacketColor);
+            g2.fillRoundRect(ix, iy + 10, 24, 18, 8, 8);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(ix, iy + 10, 24, 18, 8, 8);
 
-        // 4. Волосся / Зачіска
-        g2.setColor(hairColor);
-        g2.fillArc(ix + 3, iy, 18, 12, 0, 180);
+            g2.setColor(new Color(245, 198, 165));
+            g2.fillOval(ix + 3, iy, 18, 18);
+            g2.setColor(Color.BLACK);
+            g2.drawOval(ix + 3, iy, 18, 18);
 
-        // 5. Очі (Точки на обличчі)
-        g2.setColor(Color.BLACK);
-        g2.fillOval(ix + 7, iy + 8, 2, 3);
-        g2.fillOval(ix + 14, iy + 8, 2, 3);
+            g2.setColor(hairColor);
+            g2.fillArc(ix + 3, iy, 18, 12, 0, 180);
 
-        // 6. Ім'я персонажа з підкладкою для читабельності
+            g2.setColor(Color.BLACK);
+            g2.fillOval(ix + 7, iy + 8, 2, 3);
+            g2.fillOval(ix + 14, iy + 8, 2, 3);
+        }
+
+        // 5. Ім'я персонажа
         g2.setFont(new Font("SansSerif", Font.BOLD, 11));
         FontMetrics fm = g2.getFontMetrics();
         int textWidth = fm.stringWidth(name);
