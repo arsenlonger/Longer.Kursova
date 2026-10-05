@@ -51,7 +51,7 @@ public class InteractiveBunkerPanel extends JPanel {
     }
 
     private void initAvatars() {
-        // Гравець (Людина в зеленому куртці з коричневим волоссям)
+        // Гравець (Завантажує player.png з 2 фреймами для анімації ходьби)
         playerAvatar = new Avatar2D("Ви (Гравець)", 440, 120, new Color(46, 204, 113), new Color(100, 60, 30), false, 0, 1);
 
         // 5 Ботів-людей із різним одягом та зачісками
@@ -64,7 +64,6 @@ public class InteractiveBunkerPanel extends JPanel {
     }
 
     private void initInputListeners() {
-        // Клік мишею миттєво повертає фокус клавіатури
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -99,10 +98,9 @@ public class InteractiveBunkerPanel extends JPanel {
     private void initGameEngine60Fps() {
         Random rand = new Random();
 
-        // Єдиний 60 FPS ігровий таймер (~16 мс)
         gameLoop60Fps = new Timer(16, e -> {
             if (!isNight) {
-                // 1. Плавне переміщення гравця (WASD)
+                // 1. Переміщення гравця з оновленням анімації ходьби
                 float moveSpeed = 3.5f;
                 float dx = 0, dy = 0;
                 if (wPressed) dy -= moveSpeed;
@@ -110,16 +108,18 @@ public class InteractiveBunkerPanel extends JPanel {
                 if (aPressed) dx -= moveSpeed;
                 if (dPressed) dx += moveSpeed;
 
-                if (dx != 0 || dy != 0) {
+                boolean moving = (dx != 0 || dy != 0);
+                playerAvatar.setMoving(moving);
+                if (moving) {
                     playerAvatar.movePlayer(dx, dy, new Rectangle(30, 30, 880, 430));
                 }
+                playerAvatar.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
 
-                // 2. Плавне переміщення ботів до цілей
+                // 2. Переміщення ботів
                 for (Avatar2D bot : botAvatars) {
                     bot.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
                 }
 
-                // Періодичне оновлення цілей ботів (раз на 4 секунди)
                 long now = System.currentTimeMillis();
                 if (now - lastBotWaypointTime > 4000) {
                     lastBotWaypointTime = now;
@@ -130,13 +130,12 @@ public class InteractiveBunkerPanel extends JPanel {
                     }
                 }
 
-                // 3. Повільна та збалансована втрата ресурсів
+                // 3. Збалансоване зменшення ресурсів
                 float o2Loss = oxygenLeak ? 0.05f : 0.008f;
                 oxygenLevel = Math.max(0f, oxygenLevel - o2Loss);
                 foodLevel = Math.max(0f, foodLevel - 0.004f);
                 waterLevel = Math.max(0f, waterLevel - 0.004f);
 
-                // Рідкісний витік кисню (0.05% шанс на кадр)
                 if (rand.nextFloat() < 0.0005f && !oxygenLeak) {
                     oxygenLeak = true;
                     statusNotification = "⚠️ УВАГА! Витік у Кисневому блоці! Підійдіть до генератора та натисніть E!";
@@ -170,7 +169,6 @@ public class InteractiveBunkerPanel extends JPanel {
         isNight = true;
         statusNotification = "🌙 НІЧ " + currentDay + ": Усі мешканці бункера сплять...";
 
-        // Гравці лягають у спальні
         playerAvatar.setPosition(720, 100);
         int offset = 0;
         for (Avatar2D bot : botAvatars) {
@@ -242,14 +240,12 @@ public class InteractiveBunkerPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // 1. Малювання якісного металевого фону підлоги бункера
         int width = getWidth();
         int height = getHeight();
 
         g2.setColor(new Color(16, 17, 22));
         g2.fillRect(0, 0, width, height);
 
-        // Малювання плиток металевої підлоги (Grid Texture)
         g2.setColor(new Color(25, 27, 34));
         g2.setStroke(new BasicStroke(1));
         for (int x = 0; x < width; x += 40) {
@@ -259,7 +255,6 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawLine(0, y, width, y);
         }
 
-        // 2. Ліва панель Днів (ДЕНЬ N)
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(10, 40, 110, 400);
         g2.setColor(new Color(255, 87, 51));
@@ -279,33 +274,26 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.setColor(isNight ? Color.CYAN : Color.YELLOW);
         g2.drawString(isNight ? "🌙 НІЧ" : "☀️ ДЕНЬ", 25, 200);
 
-        // 3. Малювання 2D Кімнат Бункера з підсвіткою та сигнальними смугами
         for (BunkerMap.Room room : BunkerMap.getAllRooms()) {
             Rectangle r = new Rectangle(room.bounds.x + 90, room.bounds.y, room.bounds.width, room.bounds.height);
 
-            // Градієнтний фон кімнати
             g2.setPaint(new GradientPaint(r.x, r.y, room.color, r.x + r.width, r.y + r.height, room.color.darker()));
             g2.fill(r);
 
-            // Рамка кімнати
             g2.setColor(new Color(0, 255, 102, 180));
             g2.setStroke(new BasicStroke(2));
             g2.draw(r);
 
-            // Назва кімнати
             g2.setColor(Color.WHITE);
             g2.setFont(new Font("SansSerif", Font.BOLD, 13));
             g2.drawString(room.name, r.x + 10, r.y + 22);
         }
 
-        // 4. Малювання 2D Об'єктів та Меблів (Стіл, Генератор, Теплиця, Спальня)
-        // Зал Засідань (Красивий полірований стіл та крісла)
         g2.setColor(new Color(110, 65, 40));
         g2.fillOval(480, 105, 130, 75);
         g2.setColor(Color.BLACK);
         g2.drawOval(480, 105, 130, 75);
 
-        // Кисневий блок (Балони кисню)
         g2.setColor(oxygenLeak ? Color.RED : Color.CYAN);
         g2.fillRect(150, 80, 35, 60);
         g2.fillRect(195, 80, 35, 60);
@@ -313,19 +301,16 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.drawRect(150, 80, 35, 60);
         g2.drawRect(195, 80, 35, 60);
 
-        // Теплиця (Грядки з рослинами)
         g2.setColor(new Color(40, 140, 50));
         g2.fillRect(440, 290, 170, 35);
         g2.setColor(Color.GREEN);
         g2.drawRect(440, 290, 170, 35);
 
-        // 5. Малювання 2D Аватарок Гравця та Ботів (Люди з тінню та одягом)
         for (Avatar2D bot : botAvatars) {
             bot.draw(g2);
         }
         playerAvatar.draw(g2);
 
-        // 6. Нічний режим (Затемнення)
         if (isNight) {
             g2.setColor(new Color(0, 0, 25, 210));
             g2.fillRect(0, 0, width, height);
@@ -335,7 +320,6 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString("🌙 НІЧ " + currentDay + ": БУНКЕР СПИТЬ", width / 2 - 220, height / 2);
         }
 
-        // 7. Нижній HUD ресурсів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(130, 460, 800, 65);
         g2.setColor(new Color(0, 255, 102));

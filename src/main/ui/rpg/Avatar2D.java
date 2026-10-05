@@ -12,6 +12,10 @@ public class Avatar2D {
     private final Color hairColor;
     private final boolean isBot;
 
+    private boolean isMoving = false;
+    private int animFrame = 0;
+    private int animTick = 0;
+
     private int doctorLevel;
     private int mechanicLevel;
     private int coins;
@@ -33,12 +37,25 @@ public class Avatar2D {
     public void updateSmoothMovement(Rectangle boundary) {
         if (isBot) {
             float speed = 1.2f;
+            boolean moved = false;
             if (Math.abs(x - targetX) > speed) {
                 x += (targetX > x) ? speed : -speed;
+                moved = true;
             }
             if (Math.abs(y - targetY) > speed) {
                 y += (targetY > y) ? speed : -speed;
+                moved = true;
             }
+            setMoving(moved);
+        }
+
+        if (isMoving) {
+            animTick++;
+            if (animTick % 10 == 0) {
+                animFrame = (animFrame == 0) ? 1 : 0;
+            }
+        } else {
+            animFrame = 0;
         }
     }
 
@@ -49,7 +66,12 @@ public class Avatar2D {
         if (boundary.contains(newX, newY, 28, 28)) {
             x = newX;
             y = newY;
+            setMoving(true);
         }
+    }
+
+    public void setMoving(boolean moving) {
+        this.isMoving = moving;
     }
 
     public void setTargetPosition(float targetX, float targetY) {
@@ -65,21 +87,37 @@ public class Avatar2D {
     }
 
     /**
-     * Малювання 2D-персонажа: якщо у паці assets/images є PNG спрайт, малює PNG, інакше процедурну людину.
+     * Малювання 2D-персонажа: якщо завантажено спрайт з 2 фреймами, анімує кроки при ходьбі!
      */
     public void draw(Graphics2D g2) {
         int ix = (int) x;
         int iy = (int) y;
 
-        // Перевірка наявності кастомного PNG спрайта з Figma
         String spriteName = isBot ? "bot.png" : "player.png";
-        BufferedImage customSprite = TextureLoader.getTexture(spriteName);
+        BufferedImage fullSprite = TextureLoader.getTexture(spriteName);
 
-        if (customSprite != null) {
-            // Малювання завантаженого PNG спрайта з Figma
-            g2.drawImage(customSprite, ix, iy, 36, 48, null);
+        if (fullSprite != null) {
+            int imgW = fullSprite.getWidth();
+            int imgH = fullSprite.getHeight();
+
+            BufferedImage frameImg = fullSprite;
+
+            // Якщо спрайт містить 2 фрейми горизонтально (Width > Height) або горизонтальний спрайт-шит
+            if (imgW >= imgH && imgW >= 2) {
+                int frameW = imgW / 2;
+                int subX = animFrame * frameW;
+                frameImg = fullSprite.getSubimage(subX, 0, frameW, imgH);
+            } else if (imgH >= imgW * 1.5 && imgH >= 2) {
+                // Якщо 2 фрейми розташовані вертикально (Height > Width)
+                int frameH = imgH / 2;
+                int subY = animFrame * frameH;
+                frameImg = fullSprite.getSubimage(0, subY, imgW, frameH);
+            }
+
+            // Малювання анімованого спрайта з Figma
+            g2.drawImage(frameImg, ix, iy, 42, 54, null);
         } else {
-            // Процедурне малювання виживальника
+            // Процедурний виживальник
             g2.setColor(new Color(0, 0, 0, 80));
             g2.fillOval(ix - 2, iy + 22, 28, 10);
 
