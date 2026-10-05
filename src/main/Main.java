@@ -1,45 +1,29 @@
 package main;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import main.db.DatabaseHandler;
+import main.db.GameSessionDAO;
+import main.db.UserDAO;
+import main.models.User;
 
 public class Main {
 
-    // Налаштування підключення до бази даних у MAMP
-    private static final String DB_NAME = "kursova_db";
-    private static final String HOST = "localhost";
-    private static final String PORT = "3306";
-    private static final String URL = "jdbc:mysql://" + HOST + ":" + PORT + "/" + DB_NAME + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
-    private static final String USER = "root";
-    private static final String PASSWORD = "root";
-
     public static void main(String[] args) {
-        System.out.println("=== Перевірка підключення до бази даних ===");
-        System.out.println("Подключення до: " + URL);
+        System.out.println("=== ІНІЦІАЛІЗАЦІЯ БАЗИ ДАНИХ КУРСОВОЇ РОБОТИ (kursova_db) ===");
+        
+        // 1. Автоматичне створення таблиць (users, achievements, game_sessions)
+        DatabaseHandler.initializeDatabaseTables();
 
-        try (Connection connection = getConnection()) {
-            System.out.println("✅ УСПІХ: З'єднання з базою даних '" + DB_NAME + "' встановлено!");
+        // 2. Тестова реєстрація/вхід користувача
+        User testUser = UserDAO.registerOrLogin("Player1", "password123");
+        if (testUser != null) {
+            System.out.println("✅ Користувач авторизований: " + testUser.getUsername() + " (ID: " + testUser.getId() + ", Рівень: " + testUser.getLevel() + ")");
             
-            // Тестовий запит для перевірки працездатності
-            try (Statement statement = connection.createStatement()) {
-                System.out.println("✅ База даних готова до роботи та виконання запитів.");
-            }
-        } catch (SQLException e) {
-            System.err.println("❌ ПОМИЛКА підключення до бази даних!");
-            System.err.println("Причина: " + e.getMessage());
-            System.err.println("\nМожливі причини:");
-            System.err.println("1. Перевірте, чи запущені сервери в MAMP (Apache та MySQL).");
-            System.err.println("2. Якщо у MAMP для root встановлено порожній пароль, змініть PASSWORD на \"\".");
-            e.printStackTrace();
+            // Нарахуємо початковий досвід і збережемо ачівку
+            UserDAO.addExperienceAndStats(testUser.getId(), 250, true);
+            UserDAO.unlockAchievement(testUser.getId(), "FIRST_BLOOD", "Перший крок у бункер");
+            
+            // Запишемо тестову сесію гри
+            GameSessionDAO.saveSession(testUser.getId(), "Ядерна зима", "SINGLEPLAYER", 6, 3, 85);
         }
-    }
-
-    /**
-     * Отримати підключення до бази даних kursova_db
-     */
-    public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 }
