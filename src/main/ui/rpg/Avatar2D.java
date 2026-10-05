@@ -36,7 +36,7 @@ public class Avatar2D {
 
     public void updateSmoothMovement(Rectangle boundary) {
         if (isBot) {
-            float speed = 1.4f;
+            float speed = 1.0f; // Спокійна, реалістична швидкість ходьби ботів
             boolean moved = false;
             float nextX = x + ((targetX > x) ? speed : (targetX < x ? -speed : 0));
             float nextY = y + ((targetY > y) ? speed : (targetY < y ? -speed : 0));
@@ -45,9 +45,8 @@ public class Avatar2D {
                 if (Math.abs(x - targetX) > speed) { x = nextX; moved = true; }
                 if (Math.abs(y - targetY) > speed) { y = nextY; moved = true; }
             } else {
-                // Якщо уперся у стіну — міняє ціль
-                targetX = 50 + (float)(Math.random() * 780);
-                targetY = 50 + (float)(Math.random() * 350);
+                targetX = 50 + (float)(Math.random() * 920);
+                targetY = 50 + (float)(Math.random() * 420);
             }
             setMoving(moved);
         }
@@ -66,7 +65,6 @@ public class Avatar2D {
         float newX = x + dx;
         float newY = y + dy;
 
-        // Перевірка: ходити можна лише всередині кімнат або крізь дверні проходи!
         if (BunkerMap.isWalkablePosition((int) newX, (int) newY)) {
             x = newX;
             y = newY;

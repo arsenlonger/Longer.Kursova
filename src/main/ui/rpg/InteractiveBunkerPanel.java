@@ -20,15 +20,16 @@ public class InteractiveBunkerPanel extends JPanel {
     private Avatar2D playerAvatar;
     private CharacterCard playerCard;
     private final List<Avatar2D> botAvatars = new ArrayList<>();
+    private final List<Coin2D> droppedCoins = new ArrayList<>();
 
     // Навички
     private int botanyLevel = 0;
 
-    // Інвентар для сільського господарства
+    // Інвентар
     private boolean hasWaterBucket = false;
     private boolean hasSeeds = true;
 
-    // Стан підмітання / протирання пилу (Таймери фізичної роботи)
+    // Фізична робота
     private boolean isPerformingWork = false;
     private int workSecondsRemaining = 0;
     private Timer workTimer;
@@ -44,7 +45,7 @@ public class InteractiveBunkerPanel extends JPanel {
     private float foodLevel = 100f;
     private float waterLevel = 100f;
 
-    // Стан теплиці
+    // Теплиця
     public enum FarmStage { EMPTY, PLANTED, GROWING, READY }
     private FarmStage currentFarmStage = FarmStage.EMPTY;
     private int farmGrowSecondsRemaining = 0;
@@ -58,7 +59,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
     private Timer gameLoop60Fps;
     private long lastBotWaypointTime = 0;
-    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E біля шафи або мітли для фізичної роботи!";
+    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E для прибирання, поливу та дій!";
 
     public InteractiveBunkerPanel(GameFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -78,14 +79,14 @@ public class InteractiveBunkerPanel extends JPanel {
     }
 
     private void initAvatars() {
-        playerAvatar = new Avatar2D("Ви (Гравець)", 440, 120, new Color(46, 204, 113), new Color(100, 60, 30), false, 0, 1);
+        playerAvatar = new Avatar2D("Ви (Гравець)", 480, 120, new Color(46, 204, 113), new Color(100, 60, 30), false, 0, 1);
 
         botAvatars.clear();
         botAvatars.add(new Avatar2D("Бот 1 (Інженер)", 120, 100, new Color(230, 126, 34), new Color(50, 50, 50), true, 0, 3));
-        botAvatars.add(new Avatar2D("Бот 2 (Лікар)", 120, 310, new Color(240, 240, 240), new Color(180, 120, 60), true, 3, 0));
-        botAvatars.add(new Avatar2D("Бот 3 (Агроном)", 440, 310, new Color(241, 196, 15), new Color(80, 40, 20), true, 0, 0));
-        botAvatars.add(new Avatar2D("Бот 4 (Електрик)", 740, 310, new Color(155, 89, 182), new Color(30, 30, 30), true, 0, 2));
-        botAvatars.add(new Avatar2D("Бот 5 (Військовий)", 740, 100, new Color(52, 73, 94), new Color(120, 90, 40), true, 0, 0));
+        botAvatars.add(new Avatar2D("Бот 2 (Лікар)", 120, 330, new Color(240, 240, 240), new Color(180, 120, 60), true, 3, 0));
+        botAvatars.add(new Avatar2D("Бот 3 (Агроном)", 480, 330, new Color(241, 196, 15), new Color(80, 40, 20), true, 0, 0));
+        botAvatars.add(new Avatar2D("Бот 4 (Електрик)", 800, 330, new Color(155, 89, 182), new Color(30, 30, 30), true, 0, 2));
+        botAvatars.add(new Avatar2D("Бот 5 (Військовий)", 800, 100, new Color(52, 73, 94), new Color(120, 90, 40), true, 0, 0));
     }
 
     private void initInputListeners() {
@@ -125,7 +126,8 @@ public class InteractiveBunkerPanel extends JPanel {
 
         gameLoop60Fps = new Timer(16, e -> {
             if (!isNight) {
-                float moveSpeed = isPerformingWork ? 0f : 3.5f; // Під час фізичної роботи рухатися не можна
+                // Поміркована, контрольована швидкість руху (2.2f)
+                float moveSpeed = isPerformingWork ? 0f : 2.2f;
                 float dx = 0, dy = 0;
                 if (wPressed) dy -= moveSpeed;
                 if (sPressed) dy += moveSpeed;
@@ -135,10 +137,19 @@ public class InteractiveBunkerPanel extends JPanel {
                 boolean moving = (dx != 0 || dy != 0);
                 playerAvatar.setMoving(moving);
                 if (moving) {
-                    playerAvatar.movePlayer(dx, dy, new Rectangle(30, 30, 880, 430));
+                    playerAvatar.movePlayer(dx, dy, new Rectangle(30, 30, 980, 480));
                 }
-                playerAvatar.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
+                playerAvatar.updateSmoothMovement(new Rectangle(30, 30, 980, 480));
 
+                // Збір монет під ногами
+                for (Coin2D coin : droppedCoins) {
+                    if (coin.checkPickup(playerAvatar.getX(), playerAvatar.getY())) {
+                        playerAvatar.addCoins(coin.getAmount());
+                        statusNotification = "💰 Зібрано монету 🪙! Поточний баланс: " + playerAvatar.getCoins() + " монет.";
+                    }
+                }
+
+                // Інженер авто-ремонтує кисень з затримкою 4 сек
                 if (oxygenLeak) {
                     Avatar2D engineer = botAvatars.get(0);
                     engineer.setTargetPosition(150, 100);
@@ -152,7 +163,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
                 for (Avatar2D bot : botAvatars) {
                     if (!oxygenLeak || bot != botAvatars.get(0)) {
-                        bot.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
+                        bot.updateSmoothMovement(new Rectangle(30, 30, 980, 480));
                     }
                 }
 
@@ -161,13 +172,14 @@ public class InteractiveBunkerPanel extends JPanel {
                     lastBotWaypointTime = now;
                     for (Avatar2D bot : botAvatars) {
                         if (!oxygenLeak || bot != botAvatars.get(0)) {
-                            int tx = 50 + rand.nextInt(780);
-                            int ty = 50 + rand.nextInt(350);
+                            int tx = 50 + rand.nextInt(880);
+                            int ty = 50 + rand.nextInt(400);
                             bot.setTargetPosition(tx, ty);
                         }
                     }
                 }
 
+                // ПОВІЛЬНА ВТРАТА (Кисень: 1% в 20 сек)
                 float o2Loss = oxygenLeak ? 0.04f : 0.0015f;
                 oxygenLevel = Math.max(0f, oxygenLevel - o2Loss);
                 foodLevel = Math.max(0f, foodLevel - 0.002f);
@@ -239,10 +251,10 @@ public class InteractiveBunkerPanel extends JPanel {
         isNight = true;
         statusNotification = "🌙 НІЧ " + currentDay + ": Усі мешканці бункера сплять...";
 
-        playerAvatar.setPosition(720, 100);
+        playerAvatar.setPosition(770, 100);
         int offset = 0;
         for (Avatar2D bot : botAvatars) {
-            bot.setPosition(720 + (offset % 3) * 35, 120 + (offset / 3) * 35);
+            bot.setPosition(770 + (offset % 3) * 35, 120 + (offset / 3) * 35);
             offset++;
         }
 
@@ -284,21 +296,27 @@ public class InteractiveBunkerPanel extends JPanel {
         }
     }
 
-    private void startPhysicalChore(String choreName, int rewardCoins) {
+    private void startPhysicalChoreAndDropCoins(String choreName, int roomCenterX, int roomCenterY) {
         isPerformingWork = true;
         workSecondsRemaining = 2;
-        statusNotification = "🧼 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
+        statusNotification = "🧹 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
 
         if (workTimer != null) workTimer.stop();
         workTimer = new Timer(1000, e -> {
             workSecondsRemaining--;
             if (workSecondsRemaining <= 0) {
                 isPerformingWork = false;
-                playerAvatar.addCoins(rewardCoins);
-                statusNotification = "✅ Роботу виконай! Отримано +" + rewardCoins + " монет! (Баланс: " + playerAvatar.getCoins() + ")";
+                // Спавн 5 монет на підлозі кімнати 🪙
+                Random rand = new Random();
+                for (int i = 0; i < 5; i++) {
+                    int cx = roomCenterX + rand.nextInt(120) - 60;
+                    int cy = roomCenterY + rand.nextInt(80) - 40;
+                    droppedCoins.add(new Coin2D(cx, cy, 1));
+                }
+                statusNotification = "🪙 На підлозі з'явилися монети! Підійдіть та зберіть їх ногами!";
                 ((Timer) e.getSource()).stop();
             } else {
-                statusNotification = "🧼 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
+                statusNotification = "🧹 " + choreName + " (Залишилось: " + workSecondsRemaining + " сек)...";
             }
         });
         workTimer.start();
@@ -371,11 +389,11 @@ public class InteractiveBunkerPanel extends JPanel {
         infoLabel.setForeground(Color.WHITE);
         infoLabel.setFont(new Font("SansSerif", Font.PLAIN, 15));
 
-        BunkerButton btnSweep = new BunkerButton("🧹 Фізично підмести підлогу (+5 монет)");
+        BunkerButton btnSweep = new BunkerButton("🧹 Підмести підлогу (Скинути монети)");
         btnSweep.setPreferredSize(new Dimension(340, 42));
         btnSweep.addActionListener(e -> {
             dialog.dispose();
-            startPhysicalChore("Підмітаємо підлогу у Залі Засідань", 5);
+            startPhysicalChoreAndDropCoins("Підмітаємо підлогу у Залі Засідань", 510, 140);
         });
 
         BunkerButton btnVote = new BunkerButton("🗳️ Сісти за стіл (Фаза Голосування)");
@@ -416,18 +434,16 @@ public class InteractiveBunkerPanel extends JPanel {
         centerPanel.add(headerLabel);
         centerPanel.add(Box.createVerticalStrut(15));
 
-        // Кнопка фізичного витирання пилу
-        BunkerButton btnDust = new BunkerButton("🧼 Фізично протерти пил з книг (+5 монет)");
+        BunkerButton btnDust = new BunkerButton("🧼 Протерти пил з книг (Скинути монети)");
         btnDust.setAlignmentX(Component.CENTER_ALIGNMENT);
         btnDust.setPreferredSize(new Dimension(360, 40));
         btnDust.addActionListener(e -> {
             dialog.dispose();
-            startPhysicalChore("Протираємо пил з книг у бібліотеці", 5);
+            startPhysicalChoreAndDropCoins("Протираємо пил з книг у бібліотеці", 160, 360);
         });
         centerPanel.add(btnDust);
         centerPanel.add(Box.createVerticalStrut(10));
 
-        // Кнопка Медицини
         BunkerButton btnMed = new BunkerButton("🩸 Прокачати Медицину Lvl " + (playerAvatar.getDoctorLevel() + 1) + " (50 монет)");
         btnMed.setAlignmentX(Component.CENTER_ALIGNMENT);
         btnMed.setPreferredSize(new Dimension(360, 40));
@@ -443,7 +459,6 @@ public class InteractiveBunkerPanel extends JPanel {
         centerPanel.add(btnMed);
         centerPanel.add(Box.createVerticalStrut(10));
 
-        // Кнопка Механіки
         BunkerButton btnMech = new BunkerButton("🔧 Прокачати Механіку Lvl " + (playerAvatar.getMechanicLevel() + 1) + " (50 монет)");
         btnMech.setAlignmentX(Component.CENTER_ALIGNMENT);
         btnMech.setPreferredSize(new Dimension(360, 40));
@@ -459,7 +474,6 @@ public class InteractiveBunkerPanel extends JPanel {
         centerPanel.add(btnMech);
         centerPanel.add(Box.createVerticalStrut(10));
 
-        // Кнопка Агрономії
         BunkerButton btnBotany = new BunkerButton("🌱 Агрономія Lvl 1 (Прискорення росту) (50 монет)");
         btnBotany.setAlignmentX(Component.CENTER_ALIGNMENT);
         btnBotany.setPreferredSize(new Dimension(360, 40));
@@ -502,7 +516,7 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawLine(0, y, width, y);
         }
 
-        // 2. Панель Днів
+        // 2. Ліва панель Днів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(10, 40, 110, 400);
         g2.setColor(new Color(255, 87, 51));
@@ -522,6 +536,7 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.setColor(isNight ? Color.CYAN : Color.YELLOW);
         g2.drawString(isNight ? "🌙 НІЧ" : "☀️ ДЕНЬ", 25, 200);
 
+        // 3. БІЛЬШІ КІМНАТИ БУНКЕРА
         for (BunkerMap.Room room : BunkerMap.getAllRooms()) {
             Rectangle r = new Rectangle(room.bounds.x + 90, room.bounds.y, room.bounds.width, room.bounds.height);
 
@@ -537,6 +552,7 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString(room.name, r.x + 10, r.y + 22);
         }
 
+        // 4. Дверні проходи між кімнатами
         for (Rectangle door : BunkerMap.getAllDoors()) {
             Rectangle dr = new Rectangle(door.x + 90, door.y, door.width, door.height);
             g2.setColor(new Color(255, 180, 0, 150));
@@ -545,37 +561,47 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawRect(dr.x, dr.y, dr.width, dr.height);
         }
 
+        // 5. Меблі
         g2.setColor(new Color(110, 65, 40));
-        g2.fillOval(480, 105, 130, 75);
+        g2.fillOval(510, 115, 140, 80);
         g2.setColor(Color.BLACK);
-        g2.drawOval(480, 105, 130, 75);
+        g2.drawOval(510, 115, 140, 80);
 
+        // Кисневий блок
         g2.setColor(oxygenLeak ? Color.RED : Color.CYAN);
         g2.fillRect(150, 80, 35, 60);
         g2.fillRect(195, 80, 35, 60);
 
+        // Теплиця
         g2.setColor(new Color(40, 140, 50));
-        g2.fillRect(440, 290, 170, 35);
+        g2.fillRect(470, 310, 180, 40);
         g2.setColor(Color.GREEN);
-        g2.drawRect(440, 290, 170, 35);
+        g2.drawRect(470, 310, 180, 40);
 
         if (currentFarmStage == FarmStage.PLANTED) {
             g2.setColor(new Color(120, 80, 40));
-            g2.drawString("🌱 Засіяно (Потрібна вода 🪣)", 450, 312);
+            g2.drawString("🌱 Засіяно (Потрібна вода 🪣)", 475, 335);
         } else if (currentFarmStage == FarmStage.GROWING) {
             g2.setColor(Color.YELLOW);
-            g2.drawString("🌱 Росте (" + farmGrowSecondsRemaining + "с)", 480, 312);
+            g2.drawString("🌱 Росте (" + farmGrowSecondsRemaining + "с)", 500, 335);
         } else if (currentFarmStage == FarmStage.READY) {
             g2.setColor(Color.ORANGE);
             g2.setFont(new Font("SansSerif", Font.BOLD, 13));
-            g2.drawString("🌾 УРОЖАЙ ДОЗРІВ!", 460, 312);
+            g2.drawString("🌾 УРОЖАЙ ДОЗРІВ!", 490, 335);
         }
 
+        // 6. Малювання сяючих монет на підлозі 🪙
+        for (Coin2D coin : droppedCoins) {
+            coin.draw(g2);
+        }
+
+        // 7. Малювання Аватарок
         for (Avatar2D bot : botAvatars) {
             bot.draw(g2);
         }
         playerAvatar.draw(g2);
 
+        // 8. Нічний режим
         if (isNight) {
             g2.setColor(new Color(0, 0, 25, 210));
             g2.fillRect(0, 0, width, height);
@@ -585,10 +611,11 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString("🌙 НІЧ " + currentDay + ": БУНКЕР СПИТЬ", width / 2 - 220, height / 2);
         }
 
+        // 9. Нижній HUD ресурсів
         g2.setColor(new Color(22, 24, 30));
-        g2.fillRect(130, 460, 800, 65);
+        g2.fillRect(130, 490, 850, 65);
         g2.setColor(new Color(0, 255, 102));
-        g2.drawRect(130, 460, 800, 65);
+        g2.drawRect(130, 490, 850, 65);
 
         int ox = (int) oxygenLevel;
         int fx = (int) foodLevel;
@@ -596,21 +623,21 @@ public class InteractiveBunkerPanel extends JPanel {
 
         g2.setColor(Color.WHITE);
         g2.setFont(new Font("SansSerif", Font.BOLD, 13));
-        g2.drawString("💨 КИСЕНЬ: " + ox + "%", 150, 482);
+        g2.drawString("💨 КИСЕНЬ: " + ox + "%", 150, 512);
         g2.setColor(oxygenLeak ? Color.RED : Color.CYAN);
-        g2.fillRect(150, 492, ox * 2, 12);
+        g2.fillRect(150, 522, ox * 2, 12);
 
         g2.setColor(Color.WHITE);
-        g2.drawString("🍲 ЇЖА: " + fx + "%", 400, 482);
+        g2.drawString("🍲 ЇЖА: " + fx + "%", 410, 512);
         g2.setColor(Color.ORANGE);
-        g2.fillRect(400, 492, fx * 2, 12);
+        g2.fillRect(410, 522, fx * 2, 12);
 
         g2.setColor(Color.WHITE);
-        g2.drawString("💧 ВОДА: " + wx + "% (Відро: " + (hasWaterBucket ? "Є 🪣" : "Ні") + ")", 650, 482);
+        g2.drawString("💧 ВОДА: " + wx + "% (Відро: " + (hasWaterBucket ? "Є 🪣" : "Ні") + ")", 670, 512);
         g2.setColor(Color.BLUE);
-        g2.fillRect(650, 492, wx * 2, 12);
+        g2.fillRect(670, 522, wx * 2, 12);
 
         g2.setColor(Color.YELLOW);
-        g2.drawString(statusNotification, 150, 518);
+        g2.drawString(statusNotification, 150, 548);
     }
 }
