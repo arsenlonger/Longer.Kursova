@@ -11,6 +11,7 @@ public class GameFrame extends JFrame {
     private final SettingsPanel settingsPanel;
     private final ProfilePanel profilePanel;
     private final GameBoardPanel gameBoardPanel;
+    private final LANLobbyPanel lanLobbyPanel;
 
     public GameFrame() {
         setTitle("☣️ БУНКЕР 2D: СУДНИЙ ДЕНЬ");
@@ -26,11 +27,13 @@ public class GameFrame extends JFrame {
         settingsPanel = new SettingsPanel(this);
         profilePanel = new ProfilePanel(this);
         gameBoardPanel = new GameBoardPanel(this);
+        lanLobbyPanel = new LANLobbyPanel(this);
 
         mainContainer.add(menuPanel, "MENU");
         mainContainer.add(settingsPanel, "SETTINGS");
         mainContainer.add(profilePanel, "PROFILE");
         mainContainer.add(gameBoardPanel, "GAME");
+        mainContainer.add(lanLobbyPanel, "LAN");
 
         add(mainContainer);
         showPanel("MENU");

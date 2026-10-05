@@ -39,7 +39,7 @@ public class MainMenuPanel extends JPanel {
         add(btnSingleplayer, gbc);
 
         BunkerButton btnMultiplayer = new BunkerButton("🌐 Мережева гра (LAN)");
-        btnMultiplayer.addActionListener(e -> JOptionPane.showMessageDialog(mainFrame, "Лобі локальної мережі створюється...", "Мережева гра", JOptionPane.INFORMATION_MESSAGE));
+        btnMultiplayer.addActionListener(e -> mainFrame.showPanel("LAN"));
         gbc.gridy = 4;
         add(btnMultiplayer, gbc);
 
