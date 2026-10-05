@@ -33,8 +33,8 @@ public class MainMenuPanel extends JPanel {
         add(Box.createVerticalStrut(20), gbc);
 
         // Кнопки Меню
-        BunkerButton btnSingleplayer = new BunkerButton("🎮 Грати з Ботами");
-        btnSingleplayer.addActionListener(e -> mainFrame.showPanel("GAME"));
+        BunkerButton btnSingleplayer = new BunkerButton("🎮 Зайти в 2D Бункер (WASD)");
+        btnSingleplayer.addActionListener(e -> mainFrame.showPanel("RPG"));
         gbc.gridy = 3;
         add(btnSingleplayer, gbc);
 
