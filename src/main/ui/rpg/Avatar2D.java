@@ -36,7 +36,7 @@ public class Avatar2D {
 
     public void updateSmoothMovement(Rectangle boundary) {
         if (isBot) {
-            float speed = 1.2f;
+            float speed = 1.4f;
             boolean moved = false;
             if (Math.abs(x - targetX) > speed) {
                 x += (targetX > x) ? speed : -speed;
@@ -87,7 +87,7 @@ public class Avatar2D {
     }
 
     /**
-     * Малювання 2D-персонажа: точний вибір горизонтальних фреймів 0 та 1 без обрізання тіла!
+     * Малювання 2D-персонажа: точне дотримання пропорцій висоти/ширини зображення з Figma!
      */
     public void draw(Graphics2D g2) {
         int ix = (int) x;
@@ -103,18 +103,19 @@ public class Avatar2D {
             BufferedImage frameImg = fullSprite;
 
             // Горизонтальне розділення 2 фреймів side-by-side (130x420 кожна половина)
-            int frameW = imgW / 2;
+            int frameW = (imgW >= 2) ? imgW / 2 : imgW;
             int subX = animFrame * frameW;
             if (subX + frameW <= imgW) {
                 frameImg = fullSprite.getSubimage(subX, 0, frameW, imgH);
             }
 
-            // Малювання повного зображення персонажа висотою 68px з правильним співвідношенням
-            int renderWidth = 24;
+            // Збереження ПРАВИЛЬНИХ пропорцій (Aspect Ratio):
+            // Якщо висота оригінального фрейму 420, а ширина 130 (співвідношення 3.23)
+            int renderWidth = 30;
             int renderHeight = (int) (renderWidth * ((double) imgH / frameW));
-            renderHeight = Math.min(renderHeight, 72);
+            renderHeight = Math.min(renderHeight, 82); // пропорційний зріст
 
-            g2.drawImage(frameImg, ix, iy - (renderHeight - 32), renderWidth, renderHeight, null);
+            g2.drawImage(frameImg, ix - renderWidth / 4, iy - (renderHeight - 28), renderWidth, renderHeight, null);
         } else {
             // Процедурне малювання
             g2.setColor(new Color(0, 0, 0, 80));

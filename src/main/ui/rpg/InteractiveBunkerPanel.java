@@ -1,5 +1,7 @@
 package main.ui.rpg;
 
+import main.models.CardGenerator;
+import main.models.CharacterCard;
 import main.ui.BunkerButton;
 import main.ui.GameFrame;
 import javax.swing.*;
@@ -16,27 +18,35 @@ public class InteractiveBunkerPanel extends JPanel {
     private final GameFrame mainFrame;
 
     private Avatar2D playerAvatar;
+    private CharacterCard playerCard;
     private final List<Avatar2D> botAvatars = new ArrayList<>();
 
-    // Клавіші керування (Smooth WASD Input)
+    // Клавіші керування (WASD Input)
     private boolean wPressed = false;
     private boolean aPressed = false;
     private boolean sPressed = false;
     private boolean dPressed = false;
 
-    // Ресурси (0 - 100%)
+    // Ресурси
     private float oxygenLevel = 100f;
     private float foodLevel = 100f;
     private float waterLevel = 100f;
+
+    // Стан теплиці (Сільське господарство)
+    public enum FarmStage { EMPTY, PLANTED, GROWING, READY }
+    private FarmStage currentFarmStage = FarmStage.EMPTY;
+    private int farmGrowSecondsRemaining = 0;
+    private Timer farmTimer;
 
     // Цикл Днів та Ночі
     private int currentDay = 1;
     private boolean isNight = false;
     private boolean oxygenLeak = false;
+    private long leakStartTime = 0;
 
     private Timer gameLoop60Fps;
     private long lastBotWaypointTime = 0;
-    private String statusNotification = "Керування WASD: ходіть по бункеру. Клавіша E або Пробіл — взаємодія з кімнатами!";
+    private String statusNotification = "Керування WASD: ходіть по бункеру через двері. Натисніть E для взаємодії!";
 
     public InteractiveBunkerPanel(GameFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -44,17 +54,20 @@ public class InteractiveBunkerPanel extends JPanel {
         setBackground(new Color(10, 10, 14));
         setFocusable(true);
 
+        initPlayerCard();
         initAvatars();
         initInputListeners();
         initGameEngine60Fps();
         initTopHUD();
     }
 
+    private void initPlayerCard() {
+        playerCard = CardGenerator.generateRandomCard();
+    }
+
     private void initAvatars() {
-        // Гравець (Завантажує player.png з 2 фреймами для анімації ходьби)
         playerAvatar = new Avatar2D("Ви (Гравець)", 440, 120, new Color(46, 204, 113), new Color(100, 60, 30), false, 0, 1);
 
-        // 5 Ботів-людей із різним одягом та зачісками
         botAvatars.clear();
         botAvatars.add(new Avatar2D("Бот 1 (Інженер)", 120, 100, new Color(230, 126, 34), new Color(50, 50, 50), true, 0, 3));
         botAvatars.add(new Avatar2D("Бот 2 (Лікар)", 120, 310, new Color(240, 240, 240), new Color(180, 120, 60), true, 3, 0));
@@ -100,7 +113,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
         gameLoop60Fps = new Timer(16, e -> {
             if (!isNight) {
-                // 1. Переміщення гравця з оновленням анімації ходьби
+                // 1. Плавне переміщення гравця
                 float moveSpeed = 3.5f;
                 float dx = 0, dy = 0;
                 if (wPressed) dy -= moveSpeed;
@@ -115,30 +128,48 @@ public class InteractiveBunkerPanel extends JPanel {
                 }
                 playerAvatar.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
 
-                // 2. Переміщення ботів
-                for (Avatar2D bot : botAvatars) {
-                    bot.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
-                }
+                // 2. Інженер Бот авто-ремонтує кисневий витік із затримкою 4 секунди
+                if (oxygenLeak) {
+                    Avatar2D engineer = botAvatars.get(0);
+                    engineer.setTargetPosition(150, 100);
 
-                long now = System.currentTimeMillis();
-                if (now - lastBotWaypointTime > 4000) {
-                    lastBotWaypointTime = now;
-                    for (Avatar2D bot : botAvatars) {
-                        int tx = 50 + rand.nextInt(780);
-                        int ty = 50 + rand.nextInt(350);
-                        bot.setTargetPosition(tx, ty);
+                    if (System.currentTimeMillis() - leakStartTime > 4000) {
+                        oxygenLeak = false;
+                        oxygenLevel = Math.min(100f, oxygenLevel + 35f);
+                        statusNotification = "🛠️ Бот 1 (Інженер) усунув витік кисню у Кисневому блоці!";
                     }
                 }
 
-                // 3. Збалансоване зменшення ресурсів
-                float o2Loss = oxygenLeak ? 0.05f : 0.008f;
-                oxygenLevel = Math.max(0f, oxygenLevel - o2Loss);
-                foodLevel = Math.max(0f, foodLevel - 0.004f);
-                waterLevel = Math.max(0f, waterLevel - 0.004f);
+                // 3. Переміщення ботів
+                for (Avatar2D bot : botAvatars) {
+                    if (!oxygenLeak || bot != botAvatars.get(0)) {
+                        bot.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
+                    }
+                }
 
-                if (rand.nextFloat() < 0.0005f && !oxygenLeak) {
+                long now = System.currentTimeMillis();
+                if (now - lastBotWaypointTime > 5000) {
+                    lastBotWaypointTime = now;
+                    for (Avatar2D bot : botAvatars) {
+                        if (!oxygenLeak || bot != botAvatars.get(0)) {
+                            int tx = 50 + rand.nextInt(780);
+                            int ty = 50 + rand.nextInt(350);
+                            bot.setTargetPosition(tx, ty);
+                        }
+                    }
+                }
+
+                // 4. ДУЖЕ ПОВІЛЬНА та збалансована втрата ресурсів (Кисень: 1% в 20 секунд)
+                float o2Loss = oxygenLeak ? 0.04f : 0.0015f;
+                oxygenLevel = Math.max(0f, oxygenLevel - o2Loss);
+                foodLevel = Math.max(0f, foodLevel - 0.002f);
+                waterLevel = Math.max(0f, waterLevel - 0.002f);
+
+                // Рідкісний витік кисню (0.02% шанс)
+                if (rand.nextFloat() < 0.0002f && !oxygenLeak) {
                     oxygenLeak = true;
-                    statusNotification = "⚠️ УВАГА! Витік у Кисневому блоці! Підійдіть до генератора та натисніть E!";
+                    leakStartTime = System.currentTimeMillis();
+                    statusNotification = "⚠️ УВАГА! Витік у Кисневому блоці! Інженер висунувся на ремонт!";
                 }
             }
             repaint();
@@ -147,21 +178,48 @@ public class InteractiveBunkerPanel extends JPanel {
     }
 
     private void initTopHUD() {
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 10));
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
         topPanel.setOpaque(false);
 
+        BunkerButton btnCard = new BunkerButton("🎴 Моя Картка (Хто я)");
+        btnCard.setPreferredSize(new Dimension(220, 38));
+        btnCard.addActionListener(e -> showMyCardDialog());
+
         BunkerButton btnSleep = new BunkerButton("🛏️ Лягти спати (Кінець Дня)");
-        btnSleep.setPreferredSize(new Dimension(260, 38));
+        btnSleep.setPreferredSize(new Dimension(250, 38));
         btnSleep.addActionListener(e -> startNightPhase());
 
         BunkerButton btnBack = new BunkerButton("⬅️ Меню");
-        btnBack.setPreferredSize(new Dimension(120, 38));
+        btnBack.setPreferredSize(new Dimension(110, 38));
         btnBack.addActionListener(e -> mainFrame.showPanel("MENU"));
 
+        topPanel.add(btnCard);
         topPanel.add(btnSleep);
         topPanel.add(btnBack);
 
         add(topPanel, BorderLayout.NORTH);
+    }
+
+    private void showMyCardDialog() {
+        String cardDetails = String.format(
+                "👤 ВАШ ПЕРСОНАЖ:\n" +
+                "• Ім'я та Вік: %s, %d років (%s)\n" +
+                "• Професія: %s (%d років досвіду)\n" +
+                "• Здоров'я: %s\n" +
+                "• Хобі: %s\n" +
+                "• Фобія: %s\n" +
+                "• Багаж: %s\n" +
+                "• Спец-карта: %s (%s)\n",
+                playerCard.getName(), playerCard.getAge(), playerCard.getGender(),
+                playerCard.getProfession(), playerCard.getExperienceYears(),
+                playerCard.getHealthCondition(),
+                playerCard.getHobby(),
+                playerCard.getPhobia(),
+                playerCard.getBaggage(),
+                playerCard.getSpecialCard().getTitle(), playerCard.getSpecialCard().getDescription()
+        );
+
+        JOptionPane.showMessageDialog(this, cardDetails, "🎴 КАРАТКА ПЕРСОНАЖА", JOptionPane.INFORMATION_MESSAGE);
     }
 
     public void startNightPhase() {
@@ -196,9 +254,9 @@ public class InteractiveBunkerPanel extends JPanel {
             if (oxygenLeak) {
                 oxygenLeak = false;
                 oxygenLevel = Math.min(100f, oxygenLevel + 40f);
-                statusNotification = "🔧 Ви відремонтували клапан кисневого блоку!";
+                statusNotification = "🔧 Ви усунули витік у кисневому блоці!";
             } else {
-                statusNotification = "💨 Кисневий блок працює стабільно.";
+                statusNotification = "💨 Кисневий блок працює нормально.";
             }
         } else if (BunkerMap.LIBRARY_MED_BAY.bounds.contains(p)) {
             openLibraryDialog();
@@ -206,13 +264,42 @@ public class InteractiveBunkerPanel extends JPanel {
             statusNotification = "🗳️ Ви сіли за Стіл Переговорів. Відкривається фаза голосування!";
             mainFrame.showPanel("GAME");
         } else if (BunkerMap.HYDROPONICS_ROOM.bounds.contains(p)) {
-            foodLevel = Math.min(100f, foodLevel + 25f);
-            statusNotification = "🍲 Ви зібрали врожай у теплиці! Їжу поповнено.";
+            handleHydroponicsFarming();
         } else if (BunkerMap.WATER_STATION.bounds.contains(p)) {
             waterLevel = Math.min(100f, waterLevel + 25f);
             statusNotification = "💧 Ви обслугували насос води! Воду поповнено.";
         } else if (BunkerMap.SLEEPING_QUARTERS.bounds.contains(p)) {
             startNightPhase();
+        }
+    }
+
+    private void handleHydroponicsFarming() {
+        if (currentFarmStage == FarmStage.EMPTY) {
+            currentFarmStage = FarmStage.PLANTED;
+            statusNotification = "🌱 Насіння засіяно! Тепер потрібно полити водой (натисніть E).";
+        } else if (currentFarmStage == FarmStage.PLANTED) {
+            currentFarmStage = FarmStage.GROWING;
+            farmGrowSecondsRemaining = 10;
+            statusNotification = "🚿 Теплицю полито! Рослини ростуть (залишилось 10 сек)...";
+
+            if (farmTimer != null) farmTimer.stop();
+            farmTimer = new Timer(1000, e -> {
+                farmGrowSecondsRemaining--;
+                if (farmGrowSecondsRemaining <= 0) {
+                    currentFarmStage = FarmStage.READY;
+                    statusNotification = "🌾 УРОЖАЙ ДОЗРІВ! Натисніть E у теплиці, щоб зібрати їжу!";
+                    ((Timer) e.getSource()).stop();
+                } else {
+                    statusNotification = "🌱 Рослини ростуть... Залишилось: " + farmGrowSecondsRemaining + " сек.";
+                }
+            });
+            farmTimer.start();
+        } else if (currentFarmStage == FarmStage.GROWING) {
+            statusNotification = "🌱 Рослини ще ростуть... Залишилось: " + farmGrowSecondsRemaining + " сек.";
+        } else if (currentFarmStage == FarmStage.READY) {
+            currentFarmStage = FarmStage.EMPTY;
+            foodLevel = Math.min(100f, foodLevel + 40f);
+            statusNotification = "🌾 УРОЖАЙ ЗІБРАНО! +40% Їжі поповнено в бункер!";
         }
     }
 
@@ -243,6 +330,7 @@ public class InteractiveBunkerPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
 
+        // 1. Металевий фон
         g2.setColor(new Color(16, 17, 22));
         g2.fillRect(0, 0, width, height);
 
@@ -255,6 +343,7 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawLine(0, y, width, y);
         }
 
+        // 2. Ліва панель Днів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(10, 40, 110, 400);
         g2.setColor(new Color(255, 87, 51));
@@ -274,6 +363,7 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.setColor(isNight ? Color.CYAN : Color.YELLOW);
         g2.drawString(isNight ? "🌙 НІЧ" : "☀️ ДЕНЬ", 25, 200);
 
+        // 3. Малювання 2D Кімнат Бункера
         for (BunkerMap.Room room : BunkerMap.getAllRooms()) {
             Rectangle r = new Rectangle(room.bounds.x + 90, room.bounds.y, room.bounds.width, room.bounds.height);
 
@@ -289,11 +379,23 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString(room.name, r.x + 10, r.y + 22);
         }
 
+        // 4. Малювання Дверей між кімнатами (Doorways з сигнальними смугами)
+        for (Rectangle door : BunkerMap.getAllDoors()) {
+            Rectangle dr = new Rectangle(door.x + 90, door.y, door.width, door.height);
+            g2.setColor(new Color(255, 180, 0, 150));
+            g2.fillRect(dr.x, dr.y, dr.width, dr.height);
+            g2.setColor(Color.YELLOW);
+            g2.drawRect(dr.x, dr.y, dr.width, dr.height);
+        }
+
+        // 5. Меблі та Об'єкти
+        // Стіл у Залі Засідань
         g2.setColor(new Color(110, 65, 40));
         g2.fillOval(480, 105, 130, 75);
         g2.setColor(Color.BLACK);
         g2.drawOval(480, 105, 130, 75);
 
+        // Кисневі балони
         g2.setColor(oxygenLeak ? Color.RED : Color.CYAN);
         g2.fillRect(150, 80, 35, 60);
         g2.fillRect(195, 80, 35, 60);
@@ -301,16 +403,31 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.drawRect(150, 80, 35, 60);
         g2.drawRect(195, 80, 35, 60);
 
+        // Сільське господарство у теплиці (Теплиця 4 стадії)
         g2.setColor(new Color(40, 140, 50));
         g2.fillRect(440, 290, 170, 35);
         g2.setColor(Color.GREEN);
         g2.drawRect(440, 290, 170, 35);
 
+        if (currentFarmStage == FarmStage.PLANTED) {
+            g2.setColor(new Color(120, 80, 40));
+            g2.drawString("🌱 Засіяно", 490, 312);
+        } else if (currentFarmStage == FarmStage.GROWING) {
+            g2.setColor(Color.YELLOW);
+            g2.drawString("🌱 Росте (" + farmGrowSecondsRemaining + "с)", 480, 312);
+        } else if (currentFarmStage == FarmStage.READY) {
+            g2.setColor(Color.ORANGE);
+            g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+            g2.drawString("🌾 УРОЖАЙ ДОЗРІВ!", 460, 312);
+        }
+
+        // 6. Малювання Аватарок Гравця та Ботів
         for (Avatar2D bot : botAvatars) {
             bot.draw(g2);
         }
         playerAvatar.draw(g2);
 
+        // 7. Нічний режим
         if (isNight) {
             g2.setColor(new Color(0, 0, 25, 210));
             g2.fillRect(0, 0, width, height);
@@ -320,6 +437,7 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString("🌙 НІЧ " + currentDay + ": БУНКЕР СПИТЬ", width / 2 - 220, height / 2);
         }
 
+        // 8. Нижній HUD ресурсів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(130, 460, 800, 65);
         g2.setColor(new Color(0, 255, 102));
