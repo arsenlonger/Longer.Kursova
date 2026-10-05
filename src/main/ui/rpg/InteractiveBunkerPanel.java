@@ -21,6 +21,9 @@ public class InteractiveBunkerPanel extends JPanel {
     private CharacterCard playerCard;
     private final List<Avatar2D> botAvatars = new ArrayList<>();
 
+    // Навички гравця (Рівні навичок)
+    private int botanyLevel = 0; // 0: Базовий, 1: Прискорений ріст
+
     // Інвентар для сільського господарства
     private boolean hasWaterBucket = false;
     private boolean hasSeeds = true;
@@ -50,7 +53,7 @@ public class InteractiveBunkerPanel extends JPanel {
 
     private Timer gameLoop60Fps;
     private long lastBotWaypointTime = 0;
-    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E для дій та завдань!";
+    private String statusNotification = "Керування WASD: прохід крізь ДВЕРІ. Натисніть E для прочкачки навичок та дій!";
 
     public InteractiveBunkerPanel(GameFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -131,7 +134,6 @@ public class InteractiveBunkerPanel extends JPanel {
                 }
                 playerAvatar.updateSmoothMovement(new Rectangle(30, 30, 880, 430));
 
-                // Бот-Інженер ремонтує витік кисню з затримкою 4 сек
                 if (oxygenLeak) {
                     Avatar2D engineer = botAvatars.get(0);
                     engineer.setTargetPosition(150, 100);
@@ -161,7 +163,6 @@ public class InteractiveBunkerPanel extends JPanel {
                     }
                 }
 
-                // ПОВІЛЬНА ВТРАТА (Кисень: 1% в 20 сек)
                 float o2Loss = oxygenLeak ? 0.04f : 0.0015f;
                 oxygenLevel = Math.max(0f, oxygenLevel - o2Loss);
                 foodLevel = Math.max(0f, foodLevel - 0.002f);
@@ -210,17 +211,22 @@ public class InteractiveBunkerPanel extends JPanel {
                 "• Хобі: %s\n" +
                 "• Фобія: %s\n" +
                 "• Багаж: %s\n" +
-                "• Спец-карта: %s (%s)\n",
+                "• Спец-карта: %s (%s)\n" +
+                "\n🎓 ВАШІ ВИВЧЕНІ НАВИЧКИ:\n" +
+                "• Медицина: %d Рівень\n" +
+                "• Механіка: %d Рівень\n" +
+                "• Ботаніка/Агрономія: %d Рівень\n",
                 playerCard.getName(), playerCard.getAge(), playerCard.getGender(),
                 playerCard.getProfession(), playerCard.getExperienceYears(),
                 playerCard.getHealthCondition(),
                 playerCard.getHobby(),
                 playerCard.getPhobia(),
                 playerCard.getBaggage(),
-                playerCard.getSpecialCard().getTitle(), playerCard.getSpecialCard().getDescription()
+                playerCard.getSpecialCard().getTitle(), playerCard.getSpecialCard().getDescription(),
+                playerAvatar.getDoctorLevel(), playerAvatar.getMechanicLevel(), botanyLevel
         );
 
-        JOptionPane.showMessageDialog(this, cardDetails, "🎴 КАРАТКА ПЕРСОНАЖА", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this, cardDetails, "🎴 КАРАТКА ПЕРСОНАЖА ТА НАВИЧКИ", JOptionPane.INFORMATION_MESSAGE);
     }
 
     public void startNightPhase() {
@@ -260,7 +266,7 @@ public class InteractiveBunkerPanel extends JPanel {
                 statusNotification = "💨 Кисневий блок працює нормально.";
             }
         } else if (BunkerMap.LIBRARY_MED_BAY.bounds.contains(p)) {
-            openLibraryAndTaskDialog();
+            openLibraryAndSkillTreeDialog();
         } else if (BunkerMap.COUNCIL_ROOM.bounds.contains(p)) {
             openCouncilRoomDialog();
         } else if (BunkerMap.HYDROPONICS_ROOM.bounds.contains(p)) {
@@ -299,8 +305,10 @@ public class InteractiveBunkerPanel extends JPanel {
             if (hasWaterBucket) {
                 hasWaterBucket = false;
                 currentFarmStage = FarmStage.GROWING;
-                farmGrowSecondsRemaining = 10;
-                statusNotification = "🚿 Теплицю полито відром води! Рослини ростуть (залишилось 10 сек)...";
+                
+                // Якщо вивчено Агрономію в бібліотеці — ріст 5 сек замість 10 сек
+                farmGrowSecondsRemaining = (botanyLevel >= 1) ? 5 : 10;
+                statusNotification = "🚿 Теплицю полито відром води! Рослини ростуть (" + farmGrowSecondsRemaining + " сек)...";
 
                 if (farmTimer != null) farmTimer.stop();
                 farmTimer = new Timer(1000, e -> {
@@ -341,21 +349,48 @@ public class InteractiveBunkerPanel extends JPanel {
         }
     }
 
-    private void openLibraryAndTaskDialog() {
-        String[] options = {"🧼 Протерти пил з книг (+5 монет)", "🎓 Вивчити Механіку Lvl 2 (50 монет)", "🎓 Вивчити Медицину Lvl 1 (50 монет)", "Скасувати"};
+    private void openLibraryAndSkillTreeDialog() {
+        String[] options = {
+                "🩸 Прокачати Медицину Lvl " + (playerAvatar.getDoctorLevel() + 1) + " (50 монет)",
+                "🔧 Прокачати Механіку Lvl " + (playerAvatar.getMechanicLevel() + 1) + " (50 монет)",
+                "🌱 Прокачати Агрономію Lvl 1 (Прискорення росту) (50 монет)",
+                "🧼 Протерти пил з книг (+5 монет)",
+                "Скасувати"
+        };
+
         int choice = JOptionPane.showOptionDialog(this,
-                "📚 БІБЛІОТЕКА ТА МЕДПУНКТ\nБаланс: " + playerAvatar.getCoins() + " монет.\nРівень Медицини: " + playerAvatar.getDoctorLevel() + " | Механіки: " + playerAvatar.getMechanicLevel(),
-                "Бібліотека та Медпункт", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+                "📚 БІБЛІОТЕКА ТА ЦЕНТР ПРОКАЧКИ НАВИЧОК\n" +
+                "Баланс: " + playerAvatar.getCoins() + " монет.\n\n" +
+                "ПОТОЧНІ РІВНІ НАВИЧОК:\n" +
+                "• 🩸 Медицина: " + playerAvatar.getDoctorLevel() + " Рівень\n" +
+                "• 🔧 Механіка: " + playerAvatar.getMechanicLevel() + " Рівень\n" +
+                "• 🌱 Агрономія: " + botanyLevel + " Рівень\n",
+                "📚 Прокачка навичок у Бібліотеці", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
 
         if (choice == 0) {
+            if (playerAvatar.spendCoins(50)) {
+                playerAvatar.setDoctorLevel(playerAvatar.getDoctorLevel() + 1);
+                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Медицину до " + playerAvatar.getDoctorLevel() + " рівня!";
+            } else {
+                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+            }
+        } else if (choice == 1) {
+            if (playerAvatar.spendCoins(50)) {
+                playerAvatar.setMechanicLevel(playerAvatar.getMechanicLevel() + 1);
+                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Механіку до " + playerAvatar.getMechanicLevel() + " рівня!";
+            } else {
+                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+            }
+        } else if (choice == 2) {
+            if (playerAvatar.spendCoins(50)) {
+                botanyLevel = 1;
+                statusNotification = "🎉 ВІТАЄМО! Ви прокачали Агрономію! Рослини в теплиці тепер ростуть у 2 рази швидше (5 сек)!";
+            } else {
+                statusNotification = "❌ Недостатньо монет! Потрібно 50 монет.";
+            }
+        } else if (choice == 3) {
             playerAvatar.addCoins(5);
             statusNotification = "🧼 Ви протерли пил з книг у бібліотеці та отримали +5 монет!";
-        } else if (choice == 1 && playerAvatar.spendCoins(50)) {
-            playerAvatar.setMechanicLevel(2);
-            statusNotification = "🎓 Ви вивчили Механіку 2 рівня!";
-        } else if (choice == 2 && playerAvatar.spendCoins(50)) {
-            playerAvatar.setDoctorLevel(1);
-            statusNotification = "🎓 Ви вивчили Медицину 1 рівня!";
         }
     }
 
@@ -368,7 +403,6 @@ public class InteractiveBunkerPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
 
-        // 1. Металевий фон підлоги
         g2.setColor(new Color(16, 17, 22));
         g2.fillRect(0, 0, width, height);
 
@@ -381,7 +415,6 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawLine(0, y, width, y);
         }
 
-        // 2. Панель Днів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(10, 40, 110, 400);
         g2.setColor(new Color(255, 87, 51));
@@ -401,7 +434,6 @@ public class InteractiveBunkerPanel extends JPanel {
         g2.setColor(isNight ? Color.CYAN : Color.YELLOW);
         g2.drawString(isNight ? "🌙 НІЧ" : "☀️ ДЕНЬ", 25, 200);
 
-        // 3. Малювання 2D Кімнат Бункера
         for (BunkerMap.Room room : BunkerMap.getAllRooms()) {
             Rectangle r = new Rectangle(room.bounds.x + 90, room.bounds.y, room.bounds.width, room.bounds.height);
 
@@ -417,7 +449,6 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString(room.name, r.x + 10, r.y + 22);
         }
 
-        // 4. Дверні проходи між кімнатами
         for (Rectangle door : BunkerMap.getAllDoors()) {
             Rectangle dr = new Rectangle(door.x + 90, door.y, door.width, door.height);
             g2.setColor(new Color(255, 180, 0, 150));
@@ -426,18 +457,15 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawRect(dr.x, dr.y, dr.width, dr.height);
         }
 
-        // 5. Меблі
         g2.setColor(new Color(110, 65, 40));
         g2.fillOval(480, 105, 130, 75);
         g2.setColor(Color.BLACK);
         g2.drawOval(480, 105, 130, 75);
 
-        // Кисневий блок
         g2.setColor(oxygenLeak ? Color.RED : Color.CYAN);
         g2.fillRect(150, 80, 35, 60);
         g2.fillRect(195, 80, 35, 60);
 
-        // Теплиця
         g2.setColor(new Color(40, 140, 50));
         g2.fillRect(440, 290, 170, 35);
         g2.setColor(Color.GREEN);
@@ -455,13 +483,11 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString("🌾 УРОЖАЙ ДОЗРІВ!", 460, 312);
         }
 
-        // 6. Малювання Аватарок
         for (Avatar2D bot : botAvatars) {
             bot.draw(g2);
         }
         playerAvatar.draw(g2);
 
-        // 7. Нічний режим
         if (isNight) {
             g2.setColor(new Color(0, 0, 25, 210));
             g2.fillRect(0, 0, width, height);
@@ -471,7 +497,6 @@ public class InteractiveBunkerPanel extends JPanel {
             g2.drawString("🌙 НІЧ " + currentDay + ": БУНКЕР СПИТЬ", width / 2 - 220, height / 2);
         }
 
-        // 8. Нижній HUD ресурсів
         g2.setColor(new Color(22, 24, 30));
         g2.fillRect(130, 460, 800, 65);
         g2.setColor(new Color(0, 255, 102));
