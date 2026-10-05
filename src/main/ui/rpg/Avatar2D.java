@@ -38,13 +38,16 @@ public class Avatar2D {
         if (isBot) {
             float speed = 1.4f;
             boolean moved = false;
-            if (Math.abs(x - targetX) > speed) {
-                x += (targetX > x) ? speed : -speed;
-                moved = true;
-            }
-            if (Math.abs(y - targetY) > speed) {
-                y += (targetY > y) ? speed : -speed;
-                moved = true;
+            float nextX = x + ((targetX > x) ? speed : (targetX < x ? -speed : 0));
+            float nextY = y + ((targetY > y) ? speed : (targetY < y ? -speed : 0));
+
+            if (BunkerMap.isWalkablePosition((int) nextX, (int) nextY)) {
+                if (Math.abs(x - targetX) > speed) { x = nextX; moved = true; }
+                if (Math.abs(y - targetY) > speed) { y = nextY; moved = true; }
+            } else {
+                // Якщо уперся у стіну — міняє ціль
+                targetX = 50 + (float)(Math.random() * 780);
+                targetY = 50 + (float)(Math.random() * 350);
             }
             setMoving(moved);
         }
@@ -63,7 +66,8 @@ public class Avatar2D {
         float newX = x + dx;
         float newY = y + dy;
 
-        if (boundary.contains(newX, newY, 28, 28)) {
+        // Перевірка: ходити можна лише всередині кімнат або крізь дверні проходи!
+        if (BunkerMap.isWalkablePosition((int) newX, (int) newY)) {
             x = newX;
             y = newY;
             setMoving(true);
@@ -86,9 +90,6 @@ public class Avatar2D {
         this.targetY = y;
     }
 
-    /**
-     * Малювання 2D-персонажа: точне дотримання пропорцій висоти/ширини зображення з Figma!
-     */
     public void draw(Graphics2D g2) {
         int ix = (int) x;
         int iy = (int) y;
@@ -102,22 +103,18 @@ public class Avatar2D {
 
             BufferedImage frameImg = fullSprite;
 
-            // Горизонтальне розділення 2 фреймів side-by-side (130x420 кожна половина)
             int frameW = (imgW >= 2) ? imgW / 2 : imgW;
             int subX = animFrame * frameW;
             if (subX + frameW <= imgW) {
                 frameImg = fullSprite.getSubimage(subX, 0, frameW, imgH);
             }
 
-            // Збереження ПРАВИЛЬНИХ пропорцій (Aspect Ratio):
-            // Якщо висота оригінального фрейму 420, а ширина 130 (співвідношення 3.23)
             int renderWidth = 30;
             int renderHeight = (int) (renderWidth * ((double) imgH / frameW));
-            renderHeight = Math.min(renderHeight, 82); // пропорційний зріст
+            renderHeight = Math.min(renderHeight, 82);
 
             g2.drawImage(frameImg, ix - renderWidth / 4, iy - (renderHeight - 28), renderWidth, renderHeight, null);
         } else {
-            // Процедурне малювання
             g2.setColor(new Color(0, 0, 0, 80));
             g2.fillOval(ix - 2, iy + 22, 28, 10);
 
@@ -140,7 +137,6 @@ public class Avatar2D {
             g2.fillOval(ix + 14, iy + 8, 2, 3);
         }
 
-        // Ім'я персонажа
         g2.setFont(new Font("SansSerif", Font.BOLD, 11));
         FontMetrics fm = g2.getFontMetrics();
         int textWidth = fm.stringWidth(name);

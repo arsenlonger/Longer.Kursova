@@ -23,12 +23,12 @@ public class BunkerMap {
     public static final Room HYDROPONICS_ROOM = new Room("🍲 Теплиця (Їжа)", new Rectangle(330, 250, 310, 190), new Color(50, 70, 35));
     public static final Room WATER_STATION = new Room("💧 Водна Станція", new Rectangle(660, 250, 240, 190), new Color(30, 60, 70));
 
-    // Дверні проходи (Doorways) між кімнатами
-    public static final Rectangle DOOR_OXYGEN_COUNCIL = new Rectangle(305, 110, 30, 50);
-    public static final Rectangle DOOR_COUNCIL_SLEEP = new Rectangle(635, 110, 30, 50);
-    public static final Rectangle DOOR_COUNCIL_HYDRO = new Rectangle(460, 225, 50, 30);
-    public static final Rectangle DOOR_MED_HYDRO = new Rectangle(305, 320, 30, 50);
-    public static final Rectangle DOOR_HYDRO_WATER = new Rectangle(635, 320, 30, 50);
+    // Дверні проходи (Doorways)
+    public static final Rectangle DOOR_OXYGEN_COUNCIL = new Rectangle(305, 110, 35, 50);
+    public static final Rectangle DOOR_COUNCIL_SLEEP = new Rectangle(635, 110, 35, 50);
+    public static final Rectangle DOOR_COUNCIL_HYDRO = new Rectangle(460, 225, 50, 35);
+    public static final Rectangle DOOR_MED_HYDRO = new Rectangle(305, 320, 35, 50);
+    public static final Rectangle DOOR_HYDRO_WATER = new Rectangle(635, 320, 35, 50);
 
     public static Room[] getAllRooms() {
         return new Room[]{OXYGEN_ROOM, COUNCIL_ROOM, SLEEPING_QUARTERS, LIBRARY_MED_BAY, HYDROPONICS_ROOM, WATER_STATION};
@@ -36,5 +36,24 @@ public class BunkerMap {
 
     public static Rectangle[] getAllDoors() {
         return new Rectangle[]{DOOR_OXYGEN_COUNCIL, DOOR_COUNCIL_SLEEP, DOOR_COUNCIL_HYDRO, DOOR_MED_HYDRO, DOOR_HYDRO_WATER};
+    }
+
+    /**
+     * Перевірка: позиція (x, y) припустима лише якщо вона знаходиться ВСЕРЕДИНІ однієї з кімнат АБО всередині дверного проходу!
+     */
+    public static boolean isWalkablePosition(int x, int y) {
+        Point p = new Point(x, y);
+
+        // 1. Перевірка дверних проходів
+        for (Rectangle door : getAllDoors()) {
+            if (door.contains(p)) return true;
+        }
+
+        // 2. Перевірка кімнат
+        for (Room room : getAllRooms()) {
+            if (room.bounds.contains(p)) return true;
+        }
+
+        return false;
     }
 }
